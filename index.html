@@ -1,0 +1,1057 @@
+<!DOCTYPE html>
+<html lang="en" class="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>The Fraction Reactor Core</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;600;800;900&family=Rajdhani:wght@500;600;700&family=Fira+Code:wght@400;600&display=swap" rel="stylesheet">
+    <script>
+        tailwind.config = {
+            darkMode: 'class',
+            theme: {
+                extend: {
+                    colors: {
+                        reactor: {
+                            bg: '#040914',
+                            card: '#0a1226',
+                            border: '#172a54',
+                            cyan: '#00f0ff',
+                            purple: '#a855f7',
+                            pink: '#ec4899',
+                            emerald: '#10b981',
+                            amber: '#f59e0b',
+                            accent: '#132347'
+                        }
+                    },
+                    fontFamily: {
+                        orbitron: ['Orbitron', 'sans-serif'],
+                        rajdhani: ['Rajdhani', 'sans-serif'],
+                        code: ['Fira Code', 'monospace']
+                    }
+                }
+            }
+        }
+    </script>
+    <style>
+        body {
+            background-color: #040914;
+            color: #e2e8f0;
+            font-family: 'Rajdhani', sans-serif;
+            background-image: 
+                radial-gradient(circle at 50% 0%, rgba(0, 240, 255, 0.08) 0%, transparent 70%),
+                linear-gradient(rgba(10, 18, 38, 0.7) 1px, transparent 1px),
+                linear-gradient(90deg, rgba(10, 18, 38, 0.7) 1px, transparent 1px);
+            background-size: 100% 100%, 24px 24px, 24px 24px;
+        }
+
+        .glow-cyan { text-shadow: 0 0 10px rgba(0, 240, 255, 0.6), 0 0 20px rgba(0, 240, 255, 0.3); }
+        .glow-purple { text-shadow: 0 0 10px rgba(168, 85, 247, 0.6), 0 0 20px rgba(168, 85, 247, 0.3); }
+        .box-glow-cyan { box-shadow: 0 0 20px rgba(0, 240, 255, 0.25), inset 0 0 15px rgba(0, 240, 255, 0.1); }
+        .box-glow-purple { box-shadow: 0 0 20px rgba(168, 85, 247, 0.25), inset 0 0 15px rgba(168, 85, 247, 0.1); }
+        
+        .reactor-btn {
+            clip-path: polygon(12px 0, 100% 0, 100% calc(100% - 12px), calc(100% - 12px) 100%, 0 100%, 0 12px);
+            transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+        .reactor-btn:hover:not(:disabled) {
+            transform: translateY(-2px);
+            filter: brightness(1.25);
+        }
+        .reactor-btn:active:not(:disabled) { transform: translateY(1px); }
+
+        .scanline {
+            position: fixed;
+            top: 0; left: 0; right: 0; bottom: 0;
+            background: linear-gradient(rgba(18, 16, 16, 0) 50%, rgba(0, 0, 0, 0.2) 50%);
+            background-size: 100% 4px;
+            z-index: 40;
+            pointer-events: none;
+            opacity: 0.35;
+        }
+
+        /* Fraction Display Utility */
+        .fraction-inline {
+            display: inline-flex;
+            flex-direction: column;
+            vertical-align: middle;
+            text-align: center;
+            padding: 0 4px;
+        }
+        .fraction-numerator {
+            border-bottom: 2px solid currentColor;
+            padding-bottom: 1px;
+            line-height: 1.1;
+        }
+        .fraction-denominator {
+            padding-top: 1px;
+            line-height: 1.1;
+        }
+
+        @media print {
+            body * { visibility: hidden; }
+            #printableCertificate, #printableCertificate * { visibility: visible; }
+            #printableCertificate { position: absolute; left: 0; top: 0; width: 100%; }
+        }
+    </style>
+</head>
+<body class="min-h-screen flex flex-col justify-between relative overflow-x-hidden select-none">
+    <div class="scanline"></div>
+
+    <header class="border-b border-reactor-border bg-reactor-card/90 backdrop-blur-md sticky top-0 z-50 px-4 py-3">
+        <div class="max-w-7xl mx-auto flex flex-wrap justify-between items-center gap-4">
+            <div class="flex items-center space-x-3">
+                <div class="w-10 h-10 rounded-lg bg-reactor-cyan/10 border border-reactor-cyan flex items-center justify-center text-reactor-cyan text-xl font-orbitron font-bold box-glow-cyan">
+                    <i class="fa-solid fa-atom animate-spin-slow"></i>
+                </div>
+                <div>
+                    <h1 class="font-orbitron font-extrabold text-lg md:text-xl text-white tracking-wider flex items-center gap-2">
+                        FRACTION <span class="text-reactor-cyan">REACTOR CORE</span>
+                    </h1>
+                    <p class="text-xs text-gray-400 font-code">QUANTUM MATHEMATICS FACILITY v4.2</p>
+                </div>
+            </div>
+
+            <div class="flex items-center space-x-3 sm:space-x-5 text-sm font-code">
+                <div class="flex items-center space-x-2 bg-reactor-bg px-3 py-1.5 rounded border border-reactor-border">
+                    <i class="fa-solid fa-bolt text-reactor-amber"></i>
+                    <span class="text-gray-400 hidden sm:inline">ENERGY:</span>
+                    <span id="statXP" class="text-reactor-amber font-bold font-orbitron">0 XP</span>
+                </div>
+                <div class="flex items-center space-x-2 bg-reactor-bg px-3 py-1.5 rounded border border-reactor-border">
+                    <i class="fa-solid fa-fire text-reactor-pink"></i>
+                    <span class="text-gray-400 hidden sm:inline">STREAK:</span>
+                    <span id="statStreak" class="text-reactor-pink font-bold font-orbitron">0x</span>
+                </div>
+                <div class="flex items-center space-x-2 bg-reactor-bg px-3 py-1.5 rounded border border-reactor-border">
+                    <i class="fa-solid fa-stopwatch text-reactor-cyan"></i>
+                    <span id="statTimer" class="text-reactor-cyan font-bold font-orbitron">00:00</span>
+                </div>
+                <button id="soundToggleBtn" onclick="toggleSound()" class="p-2 rounded bg-reactor-card border border-reactor-border hover:border-reactor-cyan text-gray-300 hover:text-reactor-cyan transition">
+                    <i id="soundIcon" class="fa-solid fa-volume-high"></i>
+                </button>
+            </div>
+        </div>
+    </header>
+
+    <main class="max-w-7xl mx-auto w-full p-4 flex-grow flex flex-col justify-center my-2">
+        
+        <!-- SECTOR SELECT SCREEN -->
+        <section id="sectorSelectScreen" class="space-y-6">
+            <div class="text-center space-y-2">
+                <h2 class="text-3xl font-orbitron font-extrabold text-white tracking-wide">REACTOR CHAMBERS</h2>
+                <p class="text-gray-400 max-w-xl mx-auto">Stabilize all 5 fraction core chambers. Solve equations strictly as <span class="text-reactor-cyan font-semibold">reduced improper fractions</span> or <span class="text-reactor-cyan font-semibold">whole integers</span>.</p>
+            </div>
+
+            <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                <div id="sectorCardsContainer" class="contents"></div>
+            </div>
+
+            <div class="bg-reactor-card/70 border border-reactor-border p-5 rounded-2xl grid grid-cols-2 sm:grid-cols-4 gap-4 text-center font-orbitron">
+                <div>
+                    <div class="text-xs text-gray-400">CHAMBERS STABILIZED</div>
+                    <div id="summaryUnlocked" class="text-2xl font-bold text-reactor-cyan">1 / 5</div>
+                </div>
+                <div>
+                    <div class="text-xs text-gray-400">EQUATIONS SOLVED</div>
+                    <div id="summarySolved" class="text-2xl font-bold text-reactor-emerald">0</div>
+                </div>
+                <div>
+                    <div class="text-xs text-gray-400">ACCURACY RATING</div>
+                    <div id="summaryAccuracy" class="text-2xl font-bold text-reactor-purple">100%</div>
+                </div>
+                <div>
+                    <div class="text-xs text-gray-400">OPERATIVE RANK</div>
+                    <div id="summaryRank" class="text-2xl font-bold text-reactor-pink">CADET</div>
+                </div>
+            </div>
+        </section>
+
+        <!-- GAMEPLAY SCREEN -->
+        <section id="gameplayScreen" class="hidden space-y-6">
+            <div class="flex flex-wrap justify-between items-center gap-4 bg-reactor-card p-4 rounded-xl border border-reactor-border">
+                <button onclick="showSectorSelect()" class="reactor-btn bg-reactor-accent text-white px-4 py-2 font-orbitron text-sm flex items-center gap-2 hover:bg-gray-800">
+                    <i class="fa-solid fa-arrow-left"></i> CHAMBER SELECT
+                </button>
+                <div class="flex items-center space-x-3">
+                    <span id="gameSectorBadge" class="px-3 py-1 rounded-full text-xs font-orbitron font-bold bg-reactor-cyan/20 text-reactor-cyan border border-reactor-cyan">
+                        CHAMBER 1
+                    </span>
+                    <span id="gameProgressText" class="font-code text-sm text-gray-300">NODE 1 OF 5</span>
+                </div>
+                <button onclick="toggleScratchpad()" class="reactor-btn bg-reactor-border hover:bg-reactor-cyan/20 text-reactor-cyan border border-reactor-cyan px-4 py-2 font-orbitron text-sm flex items-center gap-2">
+                    <i class="fa-solid fa-pen-to-square"></i> SCRATCHPAD
+                </button>
+            </div>
+
+            <div class="grid grid-cols-1 lg:grid-cols-12 gap-6">
+                <!-- Main Equation Workspace -->
+                <div class="lg:col-span-8 space-y-6">
+                    <div class="bg-reactor-card border-2 border-reactor-border rounded-2xl p-6 sm:p-8 text-center relative overflow-hidden box-glow-cyan flex flex-col justify-center min-h-[300px]">
+                        <div class="absolute top-3 left-4 text-xs font-code text-gray-500 tracking-widest">CORE_REACTION_INPUT</div>
+                        <div class="absolute top-3 right-4 flex items-center space-x-2">
+                            <span class="w-2.5 h-2.5 rounded-full bg-reactor-cyan animate-pulse"></span>
+                            <span class="text-xs font-code text-reactor-cyan">CORE ACTIVE</span>
+                        </div>
+
+                        <!-- Rendered Math Equation -->
+                        <div class="my-6">
+                            <div class="text-xs font-orbitron text-reactor-purple mb-3 tracking-widest">EVALUATE AND REDUCE:</div>
+                            <div id="equationDisplay" class="text-3xl sm:text-5xl font-code font-bold text-white py-6 px-4 rounded-xl bg-reactor-bg/80 border border-reactor-border inline-flex items-center justify-center gap-3 sm:gap-6 flex-wrap">
+                                <!-- Rendered dynamically -->
+                            </div>
+                        </div>
+
+                        <!-- Answer Fraction Input -->
+                        <div class="flex flex-col items-center justify-center gap-2 my-2">
+                            <div class="text-xs font-orbitron text-gray-400">INPUT REDUCED IMPROPER FRACTION:</div>
+                            
+                            <!-- Split Input Mode for Numerator / Denominator -->
+                            <div class="flex items-center space-x-3 bg-reactor-bg/90 p-4 rounded-xl border border-reactor-border">
+                                <div class="flex flex-col items-center space-y-2">
+                                    <input type="text" id="inputNum" placeholder="Num" class="w-24 sm:w-28 text-center bg-reactor-card border-2 border-reactor-cyan rounded-lg py-2 font-code text-2xl font-bold text-reactor-cyan focus:outline-none focus:ring-2 focus:ring-reactor-cyan">
+                                    <div class="w-full h-1 bg-reactor-cyan rounded"></div>
+                                    <input type="text" id="inputDen" placeholder="Den" class="w-24 sm:w-28 text-center bg-reactor-card border-2 border-reactor-cyan rounded-lg py-2 font-code text-2xl font-bold text-reactor-cyan focus:outline-none focus:ring-2 focus:ring-reactor-cyan">
+                                </div>
+                                <div class="text-xs text-gray-400 text-left space-y-1 font-code">
+                                    <div>• If integer (e.g. 5),</div>
+                                    <div>set Denominator = 1</div>
+                                    <div>or type 5/1.</div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div id="feedbackBox" class="h-8 font-orbitron text-sm font-semibold flex items-center justify-center transition-all mt-2"></div>
+                    </div>
+
+                    <!-- Digital Control Bar & Keypad -->
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <div class="bg-reactor-card p-4 rounded-xl border border-reactor-border space-y-3">
+                            <div class="flex justify-between items-center text-xs font-orbitron text-gray-400">
+                                <span>INPUT HELP</span>
+                                <span class="text-reactor-cyan">IMPROPER FRACTIONS ONLY</span>
+                            </div>
+                            <div class="grid grid-cols-3 gap-2">
+                                <button onclick="quickInput('num')" class="reactor-btn bg-reactor-bg hover:bg-reactor-accent text-white font-code py-2 rounded border border-reactor-border text-xs">FOCUS NUM</button>
+                                <button onclick="quickInput('den')" class="reactor-btn bg-reactor-bg hover:bg-reactor-accent text-white font-code py-2 rounded border border-reactor-border text-xs">FOCUS DEN</button>
+                                <button onclick="clearInputs()" class="reactor-btn bg-red-900/40 hover:bg-red-800 text-red-300 font-orbitron py-2 rounded border border-red-700/50 text-xs">CLEAR</button>
+                            </div>
+                            <button onclick="submitAnswer()" class="reactor-btn w-full bg-reactor-cyan/20 hover:bg-reactor-cyan/40 text-reactor-cyan font-orbitron font-bold text-sm py-3 rounded border border-reactor-cyan box-glow-cyan">
+                                STABILIZE CORE [ENTER]
+                            </button>
+                        </div>
+
+                        <div class="bg-reactor-card p-4 rounded-xl border border-reactor-border flex flex-col justify-between space-y-3">
+                            <div>
+                                <h3 class="font-orbitron text-sm text-reactor-purple mb-1 flex items-center gap-2">
+                                    <i class="fa-solid fa-lightbulb"></i> STEP ASSIST PROTOCOL
+                                </h3>
+                                <p class="text-xs text-gray-400">Analyze required conversions, common denominators, or reciprocal steps (Costs 10 XP).</p>
+                            </div>
+                            <button onclick="requestHint()" class="reactor-btn w-full bg-reactor-bg hover:bg-reactor-accent text-reactor-amber border border-reactor-amber/50 font-orbitron text-xs py-3 rounded flex items-center justify-center gap-2">
+                                <i class="fa-solid fa-code-branch"></i> REVEAL CONVERSION STEPS
+                            </button>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="lg:col-span-4 space-y-6">
+                    <!-- Dynamic Fraction Visualizer -->
+                    <div class="bg-reactor-card p-5 rounded-xl border border-reactor-border space-y-3">
+                        <h3 class="font-orbitron font-bold text-white text-sm flex items-center justify-between">
+                            <span><i class="fa-solid fa-chart-pie text-reactor-cyan mr-2"></i> FRACTION VISUALIZER</span>
+                            <span class="text-xs text-gray-500 font-code">MODEL</span>
+                        </h3>
+                        <div id="visualizerContainer" class="bg-reactor-bg p-4 rounded-lg border border-reactor-border min-h-[140px] flex flex-col justify-center items-center gap-3">
+                            <!-- SVG visual representation rendered dynamically -->
+                        </div>
+                    </div>
+
+                    <!-- Step-by-Step Explanation Sidebar -->
+                    <div class="bg-reactor-card p-5 rounded-xl border border-reactor-border space-y-3">
+                        <h3 class="font-orbitron font-bold text-white text-sm flex items-center justify-between">
+                            <span><i class="fa-solid fa-list-check text-reactor-emerald mr-2"></i> DECRYPTION BREAKDOWN</span>
+                            <span class="text-xs text-gray-500 font-code">SOLVER</span>
+                        </h3>
+                        <div id="stepsList" class="space-y-2 text-xs font-code text-gray-300 max-h-[220px] overflow-y-auto">
+                            <p class="text-gray-500 italic">Submit an answer or request a hint to view full mathematical steps.</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- LEVEL COMPLETE MODAL -->
+        <div id="levelCompleteModal" class="fixed inset-0 bg-black/85 backdrop-blur-md z-50 hidden flex items-center justify-center p-4">
+            <div class="bg-reactor-card border-2 border-reactor-cyan rounded-2xl p-6 sm:p-8 max-w-lg w-full text-center space-y-6 box-glow-cyan relative">
+                <div class="w-16 h-16 bg-reactor-cyan/20 border-2 border-reactor-cyan rounded-full flex items-center justify-center mx-auto text-reactor-cyan text-3xl">
+                    <i class="fa-solid fa-lock-open"></i>
+                </div>
+                <div class="space-y-1">
+                    <h3 class="font-orbitron text-2xl font-black text-white">CHAMBER STABILIZED</h3>
+                    <p class="text-sm text-reactor-cyan font-code" id="modalLevelTitle">CHAMBER 1 CLEARED</p>
+                </div>
+
+                <div class="bg-reactor-bg p-4 rounded-xl border border-reactor-border grid grid-cols-3 gap-2 font-orbitron">
+                    <div>
+                        <div class="text-xs text-gray-400">ENERGY GAINED</div>
+                        <div id="modalXPGained" class="text-lg text-reactor-amber font-bold">+150 XP</div>
+                    </div>
+                    <div>
+                        <div class="text-xs text-gray-400">ACCURACY</div>
+                        <div id="modalAccuracy" class="text-lg text-reactor-purple font-bold">100%</div>
+                    </div>
+                    <div>
+                        <div class="text-xs text-gray-400">TIME</div>
+                        <div id="modalTime" class="text-lg text-white font-bold">01:12</div>
+                    </div>
+                </div>
+
+                <div class="flex space-x-3">
+                    <button onclick="showSectorSelect()" class="reactor-btn flex-1 bg-reactor-accent text-white font-orbitron py-3 rounded text-sm hover:bg-gray-800">
+                        CHAMBER MENU
+                    </button>
+                    <button id="nextLevelBtn" onclick="nextLevel()" class="reactor-btn flex-1 bg-reactor-cyan/20 border border-reactor-cyan text-reactor-cyan font-orbitron font-bold py-3 rounded text-sm hover:bg-reactor-cyan/40">
+                        NEXT CHAMBER <i class="fa-solid fa-forward ml-1"></i>
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        <!-- CERTIFICATE OF COMPLETION MODAL -->
+        <div id="certificateModal" class="fixed inset-0 bg-black/90 backdrop-blur-md z-50 hidden flex items-center justify-center p-4 overflow-y-auto">
+            <div class="bg-reactor-card border-2 border-reactor-purple rounded-2xl p-6 sm:p-10 max-w-3xl w-full text-center space-y-6 box-glow-purple relative">
+                <div id="printableCertificate" class="border-4 border-double border-reactor-purple p-8 rounded-xl bg-reactor-bg text-white relative overflow-hidden">
+                    <div class="font-orbitron text-xs tracking-widest text-reactor-purple mb-2">QUANTUM FRACTION REACTOR FACILITY</div>
+                    <h2 class="font-orbitron text-3xl sm:text-4xl font-extrabold text-white mb-2">CERTIFICATE OF FRACTION MASTERY</h2>
+                    <p class="text-sm font-code text-gray-300 mb-6">THIS OFFICIALLY CERTIFIES THAT MATHEMATICAL OPERATIVE</p>
+
+                    <div class="my-4 border-b-2 border-reactor-cyan inline-block px-8 py-1">
+                        <input type="text" id="agentNameInput" value="OPERATIVE FRACTION MASTER" class="bg-transparent text-center font-orbitron text-2xl font-bold text-reactor-cyan focus:outline-none w-full" />
+                    </div>
+
+                    <p class="text-sm font-rajdhani text-gray-300 max-w-xl mx-auto my-4">
+                        Has successfully stabilized all 5 Quantum Fraction Reactor Chambers, demonstrating complete mastery over Like/Unlike Denominators, Fraction Multiplication & Division, and Converting Mixed Numbers to Improper Fractions.
+                    </p>
+
+                    <div class="grid grid-cols-3 gap-4 my-6 text-center border-t border-b border-reactor-border py-4 font-code text-xs">
+                        <div>
+                            <span class="text-gray-400 block">FINAL RANK</span>
+                            <span class="text-reactor-pink font-bold text-sm">REACTOR MASTER</span>
+                        </div>
+                        <div>
+                            <span class="text-gray-400 block">ENERGY GENERATED</span>
+                            <span id="certXP" class="text-reactor-amber font-bold text-sm">0 XP</span>
+                        </div>
+                        <div>
+                            <span class="text-gray-400 block">CORE STATUS</span>
+                            <span class="text-reactor-emerald font-bold text-sm">100% STABLE</span>
+                        </div>
+                    </div>
+
+                    <div class="flex justify-between items-end pt-4 text-left font-code text-[10px] text-gray-500">
+                        <div>ISSUE DATE: <span id="certDate">2026-10-09</span></div>
+                        <div class="text-right">AUTHORIZED BY: <span class="font-orbitron text-reactor-cyan">FRACTION_CORE_AI</span></div>
+                    </div>
+                </div>
+
+                <div class="flex flex-wrap justify-center gap-4">
+                    <button onclick="window.print()" class="reactor-btn bg-reactor-purple/20 border border-reactor-purple text-reactor-purple px-6 py-3 font-orbitron font-bold text-sm rounded">
+                        <i class="fa-solid fa-print mr-2"></i> PRINT CERTIFICATE
+                    </button>
+                    <button onclick="showSectorSelect(); hideCertificate();" class="reactor-btn bg-reactor-accent text-white px-6 py-3 font-orbitron text-sm rounded">
+                        RETURN TO MENU
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        <!-- SCRATCHPAD CANVAS MODAL -->
+        <div id="scratchpadModal" class="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 hidden flex flex-col items-center justify-center p-4">
+            <div class="bg-reactor-card border border-reactor-cyan rounded-xl p-4 max-w-2xl w-full flex flex-col space-y-3">
+                <div class="flex justify-between items-center font-orbitron text-sm text-reactor-cyan">
+                    <span><i class="fa-solid fa-pen-nib mr-2"></i> ON-SCREEN FRACTION SCRATCHPAD</span>
+                    <div class="flex items-center space-x-2">
+                        <button onclick="clearScratchpad()" class="px-3 py-1 bg-red-900/40 text-red-300 rounded border border-red-700/50 text-xs">CLEAR</button>
+                        <button onclick="toggleScratchpad()" class="px-3 py-1 bg-reactor-accent text-white rounded text-xs">CLOSE</button>
+                    </div>
+                </div>
+                <div class="w-full h-80 bg-reactor-bg rounded border border-reactor-border overflow-hidden relative">
+                    <canvas id="scratchCanvas" class="w-full h-full cursor-crosshair"></canvas>
+                </div>
+            </div>
+        </div>
+    </main>
+
+    <footer class="border-t border-reactor-border bg-reactor-card/60 py-3 text-center text-xs font-code text-gray-500">
+        THE FRACTION REACTOR CORE &copy; 2026 // EDUCATIONAL FRACTION MATHEMATICS ENGINE // GITHUB PAGES READY
+    </footer>
+
+    <script>
+        let audioCtx = null;
+        let soundEnabled = true;
+
+        function initAudio() {
+            if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+        }
+
+        function playTone(freq, type, duration, vol = 0.08) {
+            if (!soundEnabled) return;
+            try {
+                initAudio();
+                const osc = audioCtx.createOscillator();
+                const gain = audioCtx.createGain();
+                osc.type = type;
+                osc.frequency.setValueAtTime(freq, audioCtx.currentTime);
+                gain.gain.setValueAtTime(vol, audioCtx.currentTime);
+                gain.gain.exponentialRampToValueAtTime(0.0001, audioCtx.currentTime + duration);
+                osc.connect(gain);
+                gain.connect(audioCtx.destination);
+                osc.start();
+                osc.stop(audioCtx.currentTime + duration);
+            } catch (e) {}
+        }
+
+        function playSound(type) {
+            if (!soundEnabled) return;
+            if (type === 'click') playTone(750, 'sine', 0.04, 0.05);
+            else if (type === 'correct') {
+                playTone(523.25, 'triangle', 0.1, 0.08);
+                setTimeout(() => playTone(659.25, 'triangle', 0.1, 0.08), 70);
+                setTimeout(() => playTone(783.99, 'triangle', 0.18, 0.08), 140);
+            } else if (type === 'wrong') {
+                playTone(220, 'sawtooth', 0.15, 0.12);
+                setTimeout(() => playTone(165, 'sawtooth', 0.25, 0.12), 90);
+            } else if (type === 'unlock') {
+                playTone(440, 'sine', 0.08, 0.08);
+                setTimeout(() => playTone(554.37, 'sine', 0.08, 0.08), 90);
+                setTimeout(() => playTone(659.25, 'sine', 0.08, 0.08), 180);
+                setTimeout(() => playTone(880, 'sine', 0.25, 0.12), 270);
+            }
+        }
+
+        function toggleSound() {
+            soundEnabled = !soundEnabled;
+            document.getElementById('soundIcon').className = soundEnabled ? 'fa-solid fa-volume-high' : 'fa-solid fa-volume-xmark text-red-400';
+        }
+
+        const CHAMBERS = [
+            {
+                id: 1,
+                title: "Like Denominators",
+                subtitle: "Basic Fraction Addition & Subtraction",
+                description: "Add and subtract simple fractions sharing identical denominators.",
+                icon: "fa-layer-group",
+                color: "reactor-cyan"
+            },
+            {
+                id: 2,
+                title: "Unlike Denominators",
+                subtitle: "Common Denominators & Equivalent Fractions",
+                description: "Find LCD/LCM to combine fractions with different denominators.",
+                icon: "fa-scale-balanced",
+                color: "reactor-purple"
+            },
+            {
+                id: 3,
+                title: "Multiply & Divide",
+                subtitle: "Numerators, Denominators & Reciprocals",
+                description: "Multiply directly or multiply by the reciprocal (Keep-Change-Flip).",
+                icon: "fa-xmark",
+                color: "reactor-amber"
+            },
+            {
+                id: 4,
+                title: "Mixed Numbers (+/-)",
+                subtitle: "Convert Mixed to Improper Fractions First!",
+                description: "Convert mixed numbers into improper fractions before combining.",
+                icon: "fa-cubes",
+                color: "reactor-pink"
+            },
+            {
+                id: 5,
+                title: "Mixed Numbers (×/÷)",
+                subtitle: "Master Reactor Core Operations",
+                description: "Complex mixed number multiplication and division challenges.",
+                icon: "fa-atom",
+                color: "reactor-emerald"
+            }
+        ];
+
+        let state = {
+            xp: 0,
+            streak: 0,
+            currentLevel: 1,
+            currentNode: 1,
+            totalNodes: 5,
+            unlockedLevel: 1,
+            totalSolved: 0,
+            totalAttempts: 0,
+            timerSeconds: 0,
+            timerInterval: null,
+            currentProblem: null
+        };
+
+        // Greatest Common Divisor
+        function gcd(a, b) {
+            a = Math.abs(a);
+            b = Math.abs(b);
+            while (b) {
+                let t = b;
+                b = a % b;
+                a = t;
+            }
+            return a;
+        }
+
+        // Least Common Multiple
+        function lcm(a, b) {
+            return (a * b) / gcd(a, b);
+        }
+
+        function randInt(min, max) {
+            return Math.floor(Math.random() * (max - min + 1)) + min;
+        }
+
+        function generateProblem(level) {
+            let p = {
+                level: level,
+                op: '',
+                f1: { w: 0, n: 1, d: 2 },
+                f2: { w: 0, n: 1, d: 2 },
+                ansN: 1,
+                ansD: 1,
+                steps: []
+            };
+
+            if (level === 1) {
+                // Like Denominators (+ / -)
+                p.op = Math.random() > 0.5 ? '+' : '-';
+                const den = randInt(3, 10);
+                let n1 = randInt(1, den - 1);
+                let n2 = randInt(1, den - 1);
+
+                if (p.op === '-' && n1 < n2) {
+                    let temp = n1; n1 = n2; n2 = temp;
+                }
+
+                p.f1 = { w: 0, n: n1, d: den };
+                p.f2 = { w: 0, n: n2, d: den };
+
+                let rawN = p.op === '+' ? n1 + n2 : n1 - n2;
+                let rawD = den;
+                let g = gcd(rawN, rawD);
+
+                p.ansN = rawN / g;
+                p.ansD = rawD / g;
+
+                p.steps.push(`1. Denominators are identical (${den}). Combine numerators: ${n1} ${p.op} ${n2} = ${rawN}`);
+                p.steps.push(`2. Raw result: ${rawN}/${rawD}`);
+                if (g > 1) {
+                    p.steps.push(`3. Simplify by dividing numerator and denominator by GCD (${g}): ${p.ansN}/${p.ansD}`);
+                } else {
+                    p.steps.push(`3. Fraction is already in lowest terms: ${p.ansN}/${p.ansD}`);
+                }
+            }
+            else if (level === 2) {
+                // Unlike Denominators (+ / -)
+                p.op = Math.random() > 0.5 ? '+' : '-';
+                let d1 = randInt(2, 8);
+                let d2 = randInt(2, 8);
+                while (d1 === d2) d2 = randInt(2, 8);
+
+                let n1 = randInt(1, d1 * 2);
+                let n2 = randInt(1, d2 * 2);
+
+                let commonD = lcm(d1, d2);
+                let scaledN1 = n1 * (commonD / d1);
+                let scaledN2 = n2 * (commonD / d2);
+
+                if (p.op === '-' && scaledN1 < scaledN2) {
+                    let tempN = n1; n1 = n2; n2 = tempN;
+                    let tempD = d1; d1 = d2; d2 = tempD;
+                    scaledN1 = n1 * (commonD / d1);
+                    scaledN2 = n2 * (commonD / d2);
+                }
+
+                p.f1 = { w: 0, n: n1, d: d1 };
+                p.f2 = { w: 0, n: n2, d: d2 };
+
+                let rawN = p.op === '+' ? scaledN1 + scaledN2 : scaledN1 - scaledN2;
+                let rawD = commonD;
+                let g = gcd(rawN, rawD);
+
+                p.ansN = rawN / g;
+                p.ansD = rawD / g;
+
+                p.steps.push(`1. Find Least Common Denominator (LCD) of ${d1} and ${d2}: LCD = ${commonD}`);
+                p.steps.push(`2. Convert to equivalent fractions: (${n1}×${commonD/d1})/(${d1}×${commonD/d1}) = ${scaledN1}/${commonD} and (${n2}×${commonD/d2})/(${d2}×${commonD/d2}) = ${scaledN2}/${commonD}`);
+                p.steps.push(`3. Combine numerators: ${scaledN1} ${p.op} ${scaledN2} = ${rawN}/${rawD}`);
+                if (g > 1) p.steps.push(`4. Reduce using GCD (${g}): ${p.ansN}/${p.ansD}`);
+            }
+            else if (level === 3) {
+                // Multiply & Divide
+                p.op = Math.random() > 0.5 ? '×' : '÷';
+                let n1 = randInt(1, 6);
+                let d1 = randInt(2, 7);
+                let n2 = randInt(1, 6);
+                let d2 = randInt(2, 7);
+
+                p.f1 = { w: 0, n: n1, d: d1 };
+                p.f2 = { w: 0, n: n2, d: d2 };
+
+                let rawN, rawD;
+                if (p.op === '×') {
+                    rawN = n1 * n2;
+                    rawD = d1 * d2;
+                    p.steps.push(`1. Multiply numerators: ${n1} × ${n2} = ${rawN}`);
+                    p.steps.push(`2. Multiply denominators: ${d1} × ${d2} = ${rawD}`);
+                } else {
+                    rawN = n1 * d2;
+                    rawD = d1 * n2;
+                    p.steps.push(`1. Apply Keep-Change-Flip (multiply by reciprocal): ${n1}/${d1} × ${d2}/${n2}`);
+                    p.steps.push(`2. Multiply across: (${n1}×${d2})/(${d1}×${n2}) = ${rawN}/${rawD}`);
+                }
+
+                let g = gcd(rawN, rawD);
+                p.ansN = rawN / g;
+                p.ansD = rawD / g;
+
+                if (g > 1) p.steps.push(`3. Reduce fraction by GCD (${g}): ${p.ansN}/${p.ansD}`);
+                else p.steps.push(`3. Fraction is in reduced form: ${p.ansN}/${p.ansD}`);
+            }
+            else if (level === 4) {
+                // Mixed Numbers (+ / -)
+                p.op = Math.random() > 0.5 ? '+' : '-';
+                let w1 = randInt(1, 3);
+                let n1 = randInt(1, 4);
+                let d1 = randInt(2, 5);
+                
+                let w2 = randInt(1, 3);
+                let n2 = randInt(1, 4);
+                let d2 = randInt(2, 5);
+
+                let impN1 = w1 * d1 + n1;
+                let impN2 = w2 * d2 + n2;
+
+                let commonD = lcm(d1, d2);
+                let scaledN1 = impN1 * (commonD / d1);
+                let scaledN2 = impN2 * (commonD / d2);
+
+                if (p.op === '-' && scaledN1 < scaledN2) {
+                    let tempW = w1, tempN = n1, tempD = d1;
+                    w1 = w2; n1 = n2; d1 = d2;
+                    w2 = tempW; n2 = tempN; d2 = tempD;
+                    impN1 = w1 * d1 + n1;
+                    impN2 = w2 * d2 + n2;
+                    commonD = lcm(d1, d2);
+                    scaledN1 = impN1 * (commonD / d1);
+                    scaledN2 = impN2 * (commonD / d2);
+                }
+
+                p.f1 = { w: w1, n: n1, d: d1 };
+                p.f2 = { w: w2, n: n2, d: d2 };
+
+                let rawN = p.op === '+' ? scaledN1 + scaledN2 : scaledN1 - scaledN2;
+                let rawD = commonD;
+                let g = gcd(rawN, rawD);
+
+                p.ansN = rawN / g;
+                p.ansD = rawD / g;
+
+                p.steps.push(`1. Convert mixed numbers to improper fractions: ${w1} ${n1}/${d1} = ${impN1}/${d1} AND ${w2} ${n2}/${d2} = ${impN2}/${d2}`);
+                p.steps.push(`2. Find LCD of ${d1} and ${d2}: LCD = ${commonD}`);
+                p.steps.push(`3. Convert & calculate: ${scaledN1}/${commonD} ${p.op} ${scaledN2}/${commonD} = ${rawN}/${commonD}`);
+                if (g > 1) p.steps.push(`4. Reduce improper fraction by GCD (${g}): ${p.ansN}/${p.ansD}`);
+            }
+            else {
+                // Level 5: Mixed Numbers (× / ÷)
+                p.op = Math.random() > 0.5 ? '×' : '÷';
+                let w1 = randInt(1, 3);
+                let n1 = randInt(1, 3);
+                let d1 = randInt(2, 4);
+
+                let w2 = randInt(1, 3);
+                let n2 = randInt(1, 3);
+                let d2 = randInt(2, 4);
+
+                let impN1 = w1 * d1 + n1;
+                let impN2 = w2 * d2 + n2;
+
+                p.f1 = { w: w1, n: n1, d: d1 };
+                p.f2 = { w: w2, n: n2, d: d2 };
+
+                let rawN, rawD;
+                p.steps.push(`1. Convert mixed numbers to improper fractions first: ${w1} ${n1}/${d1} = ${impN1}/${d1} AND ${w2} ${n2}/${d2} = ${impN2}/${d2}`);
+
+                if (p.op === '×') {
+                    rawN = impN1 * impN2;
+                    rawD = d1 * d2;
+                    p.steps.push(`2. Multiply numerators & denominators: (${impN1}×${impN2})/(${d1}×${d2}) = ${rawN}/${rawD}`);
+                } else {
+                    rawN = impN1 * d2;
+                    rawD = d1 * impN2;
+                    p.steps.push(`2. Flip second fraction and multiply: (${impN1}/${d1}) × (${d2}/${impN2}) = ${rawN}/${rawD}`);
+                }
+
+                let g = gcd(rawN, rawD);
+                p.ansN = rawN / g;
+                p.ansD = rawD / g;
+
+                if (g > 1) p.steps.push(`3. Reduce improper fraction using GCD (${g}): ${p.ansN}/${p.ansD}`);
+                else p.steps.push(`3. Result is already reduced improper fraction: ${p.ansN}/${p.ansD}`);
+            }
+
+            return p;
+        }
+
+        function loadUserData() {
+            const saved = localStorage.getItem('fraction_reactor_core_save');
+            if (saved) {
+                try {
+                    const parsed = JSON.parse(saved);
+                    state.xp = parsed.xp || 0;
+                    state.unlockedLevel = parsed.unlockedLevel || 1;
+                    state.totalSolved = parsed.totalSolved || 0;
+                    state.totalAttempts = parsed.totalAttempts || 0;
+                } catch(e) {}
+            }
+            updateStatsUI();
+        }
+
+        function saveUserData() {
+            localStorage.setItem('fraction_reactor_core_save', JSON.stringify({
+                xp: state.xp,
+                unlockedLevel: state.unlockedLevel,
+                totalSolved: state.totalSolved,
+                totalAttempts: state.totalAttempts
+            }));
+        }
+
+        function updateStatsUI() {
+            document.getElementById('statXP').innerText = `${state.xp} XP`;
+            document.getElementById('statStreak').innerText = `${state.streak}x`;
+            document.getElementById('summarySolved').innerText = state.totalSolved;
+            document.getElementById('summaryUnlocked').innerText = `${state.unlockedLevel} / 5`;
+            
+            const acc = state.totalAttempts > 0 ? Math.round((state.totalSolved / state.totalAttempts) * 100) : 100;
+            document.getElementById('summaryAccuracy').innerText = `${acc}%`;
+
+            let rank = "CADET";
+            if (state.xp >= 1000) rank = "REACTOR MASTER";
+            else if (state.xp >= 600) rank = "QUANTUM ENGINEER";
+            else if (state.xp >= 300) rank = "CORE TECHNICIAN";
+            else if (state.xp >= 100) rank = "OPERATIVE";
+            document.getElementById('summaryRank').innerText = rank;
+        }
+
+        function renderSectorCards() {
+            const container = document.getElementById('sectorCardsContainer');
+            container.innerHTML = "";
+
+            CHAMBERS.forEach(ch => {
+                const isUnlocked = ch.id <= state.unlockedLevel;
+                const card = document.createElement('div');
+                card.className = `bg-reactor-card border ${isUnlocked ? 'border-reactor-border hover:border-' + ch.color : 'border-gray-800 opacity-60'} p-6 rounded-2xl flex flex-col justify-between transition-all`;
+
+                card.innerHTML = `
+                    <div class="space-y-3">
+                        <div class="flex justify-between items-start">
+                            <span class="w-10 h-10 rounded-xl ${isUnlocked ? 'bg-reactor-bg border border-reactor-border text-reactor-cyan' : 'bg-gray-900 text-gray-600'} flex items-center justify-center text-lg">
+                                <i class="fa-solid ${ch.icon}"></i>
+                            </span>
+                            <span class="font-orbitron text-[10px] font-bold px-2 py-1 rounded ${isUnlocked ? 'bg-reactor-cyan/10 text-reactor-cyan' : 'bg-gray-800 text-gray-500'}">
+                                ${isUnlocked ? 'ONLINE' : 'LOCKED'}
+                            </span>
+                        </div>
+                        <div>
+                            <h3 class="font-orbitron text-lg font-bold text-white">CHAMBER ${ch.id}: ${ch.title}</h3>
+                            <p class="text-xs text-reactor-purple font-code">${ch.subtitle}</p>
+                        </div>
+                        <p class="text-xs text-gray-400 font-rajdhani">${ch.description}</p>
+                    </div>
+                    <button onclick="${isUnlocked ? `startLevel(${ch.id})` : ''}" ${!isUnlocked ? 'disabled' : ''} class="reactor-btn w-full mt-6 ${isUnlocked ? 'bg-reactor-cyan/20 hover:bg-reactor-cyan/40 border border-reactor-cyan text-reactor-cyan' : 'bg-gray-800 text-gray-600 border border-gray-700 cursor-not-allowed'} font-orbitron font-bold text-xs py-3 rounded">
+                        ${isUnlocked ? 'INITIALIZE STABILIZATION' : 'LOCKED - CLEAR PREVIOUS'}
+                    </button>
+                `;
+                container.appendChild(card);
+            });
+        }
+
+        function startTimer() {
+            clearInterval(state.timerInterval);
+            state.timerSeconds = 0;
+            state.timerInterval = setInterval(() => {
+                state.timerSeconds++;
+                const mins = String(Math.floor(state.timerSeconds / 60)).padStart(2, '0');
+                const secs = String(state.timerSeconds % 60).padStart(2, '0');
+                document.getElementById('statTimer').innerText = `${mins}:${secs}`;
+            }, 1000);
+        }
+
+        function showSectorSelect() {
+            clearInterval(state.timerInterval);
+            document.getElementById('sectorSelectScreen').classList.remove('hidden');
+            document.getElementById('gameplayScreen').classList.add('hidden');
+            renderSectorCards();
+            updateStatsUI();
+        }
+
+        function startLevel(lvlId) {
+            playSound('click');
+            state.currentLevel = lvlId;
+            state.currentNode = 1;
+            document.getElementById('sectorSelectScreen').classList.add('hidden');
+            document.getElementById('gameplayScreen').classList.remove('hidden');
+            document.getElementById('gameSectorBadge').innerText = `CHAMBER ${lvlId}`;
+            
+            startTimer();
+            loadNextQuestion();
+        }
+
+        function renderFractionHTML(f) {
+            if (f.w > 0) {
+                return `<span class="mr-1 text-reactor-cyan font-bold">${f.w}</span><div class="fraction-inline"><span class="fraction-numerator">${f.n}</span><span class="fraction-denominator">${f.d}</span></div>`;
+            }
+            return `<div class="fraction-inline"><span class="fraction-numerator">${f.n}</span><span class="fraction-denominator">${f.d}</span></div>`;
+        }
+
+        function renderVisualizer(p) {
+            const container = document.getElementById('visualizerContainer');
+            let den = p.f1.d;
+            let n1 = p.f1.w ? (p.f1.w * p.f1.d + p.f1.n) : p.f1.n;
+            
+            // Build simple SVG Fraction Bar representation
+            let barsHTML = `<div class="w-full flex flex-col gap-2 items-center text-xs font-code">
+                <div class="text-gray-400">AREA MODEL REPRESENTATION</div>
+                <div class="w-full max-w-xs bg-reactor-card border border-reactor-border h-8 rounded flex overflow-hidden p-0.5">`;
+
+            let displayTotal = Math.max(den, n1, p.f2.d);
+            for (let i = 0; i < displayTotal; i++) {
+                let isFilled = i < n1;
+                barsHTML += `<div class="flex-1 h-full mx-0.5 rounded-sm ${isFilled ? 'bg-reactor-cyan border border-reactor-cyan' : 'bg-reactor-bg border border-gray-700'}"></div>`;
+            }
+            barsHTML += `</div><div class="text-reactor-cyan font-bold">${n1} / ${den} visual slices</div></div>`;
+
+            container.innerHTML = barsHTML;
+        }
+
+        function loadNextQuestion() {
+            document.getElementById('inputNum').value = "";
+            document.getElementById('inputDen').value = "";
+            document.getElementById('feedbackBox').innerText = "";
+            document.getElementById('gameProgressText').innerText = `NODE ${state.currentNode} OF ${state.totalNodes}`;
+
+            state.currentProblem = generateProblem(state.currentLevel);
+            const p = state.currentProblem;
+
+            const eqContainer = document.getElementById('equationDisplay');
+            eqContainer.innerHTML = `
+                ${renderFractionHTML(p.f1)}
+                <span class="text-reactor-purple mx-2 font-bold">${p.op}</span>
+                ${renderFractionHTML(p.f2)}
+                <span class="text-gray-400 mx-2">=</span>
+                <span class="text-reactor-cyan font-bold">?</span>
+            `;
+
+            renderVisualizer(p);
+
+            const stepsList = document.getElementById('stepsList');
+            stepsList.innerHTML = p.steps.map(s => `<div class="p-2 bg-reactor-bg rounded border border-reactor-border">${s}</div>`).join('');
+            
+            document.getElementById('inputNum').focus();
+        }
+
+        function quickInput(field) {
+            if (field === 'num') document.getElementById('inputNum').focus();
+            else document.getElementById('inputDen').focus();
+        }
+
+        function clearInputs() {
+            document.getElementById('inputNum').value = "";
+            document.getElementById('inputDen').value = "";
+            document.getElementById('inputNum').focus();
+        }
+
+        function submitAnswer() {
+            let numStr = document.getElementById('inputNum').value.trim();
+            let denStr = document.getElementById('inputDen').value.trim();
+
+            // Allow typing "7/2" directly in the numerator box
+            if (numStr.includes('/')) {
+                const parts = numStr.split('/');
+                numStr = parts[0];
+                denStr = parts[1];
+            }
+
+            if (!numStr) return;
+
+            let userN = parseInt(numStr, 10);
+            let userD = denStr ? parseInt(denStr, 10) : 1;
+
+            if (isNaN(userN) || isNaN(userD) || userD === 0) {
+                const fb = document.getElementById('feedbackBox');
+                fb.className = "h-8 font-orbitron text-xs font-semibold text-red-400";
+                fb.innerText = "INVALID INPUT! Enter valid integer values.";
+                return;
+            }
+
+            state.totalAttempts++;
+            const p = state.currentProblem;
+            const fb = document.getElementById('feedbackBox');
+
+            if (userN === p.ansN && userD === p.ansD) {
+                // Correct Answer
+                playSound('correct');
+                state.streak++;
+                state.totalSolved++;
+                const earnedXP = 25 * state.streak;
+                state.xp += earnedXP;
+                updateStatsUI();
+                saveUserData();
+
+                fb.className = "h-8 font-orbitron text-sm font-semibold text-reactor-emerald glow-cyan";
+                fb.innerText = `REACTION STABILIZED! +${earnedXP} XP`;
+
+                setTimeout(() => {
+                    if (state.currentNode < state.totalNodes) {
+                        state.currentNode++;
+                        loadNextQuestion();
+                    } else {
+                        onLevelComplete();
+                    }
+                }, 1100);
+            } else {
+                // Check if correct value but not reduced
+                let userVal = userN / userD;
+                let correctVal = p.ansN / p.ansD;
+
+                playSound('wrong');
+                state.streak = 0;
+                updateStatsUI();
+
+                if (Math.abs(userVal - correctVal) < 0.0001 && (userN !== p.ansN || userD !== p.ansD)) {
+                    fb.className = "h-8 font-orbitron text-xs font-semibold text-reactor-amber";
+                    fb.innerText = `EQUIVALENT VALUE, BUT NOT FULLY REDUCED! Divide by GCD (${gcd(userN, userD)}).`;
+                } else {
+                    fb.className = "h-8 font-orbitron text-xs font-semibold text-reactor-pink";
+                    fb.innerText = `REACTION UNSTABLE! Correct reduced answer: ${p.ansN}/${p.ansD}`;
+                }
+            }
+        }
+
+        function requestHint() {
+            playSound('click');
+            if (state.xp >= 10) {
+                state.xp -= 10;
+                updateStatsUI();
+                const fb = document.getElementById('feedbackBox');
+                fb.className = "h-8 font-orbitron text-xs font-semibold text-reactor-amber";
+                fb.innerText = `HINT: ${state.currentProblem.steps[0]}`;
+            } else {
+                alert("Insufficient Energy XP for hint protocol!");
+            }
+        }
+
+        function onLevelComplete() {
+            playSound('unlock');
+            clearInterval(state.timerInterval);
+
+            if (state.currentLevel === state.unlockedLevel && state.unlockedLevel < 5) {
+                state.unlockedLevel++;
+                saveUserData();
+            }
+
+            const mins = String(Math.floor(state.timerSeconds / 60)).padStart(2, '0');
+            const secs = String(state.timerSeconds % 60).padStart(2, '0');
+
+            document.getElementById('modalLevelTitle').innerText = `CHAMBER ${state.currentLevel} STABILIZED`;
+            document.getElementById('modalXPGained').innerText = `+${120 * state.currentLevel} XP`;
+            document.getElementById('modalAccuracy').innerText = `100%`;
+            document.getElementById('modalTime').innerText = `${mins}:${secs}`;
+
+            if (state.currentLevel === 5) {
+                showCertificate();
+            } else {
+                document.getElementById('levelCompleteModal').classList.remove('hidden');
+            }
+        }
+
+        function nextLevel() {
+            document.getElementById('levelCompleteModal').classList.add('hidden');
+            if (state.currentLevel < 5) startLevel(state.currentLevel + 1);
+            else showSectorSelect();
+        }
+
+        function showCertificate() {
+            document.getElementById('levelCompleteModal').classList.add('hidden');
+            document.getElementById('certXP').innerText = `${state.xp} XP`;
+            document.getElementById('certDate').innerText = new Date().toISOString().split('T')[0];
+            document.getElementById('certificateModal').classList.remove('hidden');
+        }
+
+        function hideCertificate() {
+            document.getElementById('certificateModal').classList.add('hidden');
+        }
+
+        let canvas, ctx, isDrawing = false;
+
+        function initScratchpad() {
+            canvas = document.getElementById('scratchCanvas');
+            ctx = canvas.getContext('2d');
+            canvas.width = canvas.parentElement.clientWidth;
+            canvas.height = canvas.parentElement.clientHeight;
+
+            ctx.strokeStyle = '#00f0ff';
+            ctx.lineWidth = 2;
+            ctx.lineCap = 'round';
+
+            canvas.addEventListener('mousedown', startDraw);
+            canvas.addEventListener('mousemove', draw);
+            canvas.addEventListener('mouseup', stopDraw);
+            canvas.addEventListener('touchstart', (e) => { startDraw(e.touches[0]); e.preventDefault(); });
+            canvas.addEventListener('touchmove', (e) => { draw(e.touches[0]); e.preventDefault(); });
+            canvas.addEventListener('touchend', stopDraw);
+        }
+
+        function startDraw(e) {
+            isDrawing = true;
+            const rect = canvas.getBoundingClientRect();
+            ctx.beginPath();
+            ctx.moveTo(e.clientX - rect.left, e.clientY - rect.top);
+        }
+
+        function draw(e) {
+            if (!isDrawing) return;
+            const rect = canvas.getBoundingClientRect();
+            ctx.lineTo(e.clientX - rect.left, e.clientY - rect.top);
+            ctx.stroke();
+        }
+
+        function stopDraw() { isDrawing = false; }
+        function clearScratchpad() { ctx.clearRect(0, 0, canvas.width, canvas.height); }
+
+        function toggleScratchpad() {
+            playSound('click');
+            const modal = document.getElementById('scratchpadModal');
+            if (modal.classList.contains('hidden')) {
+                modal.classList.remove('hidden');
+                setTimeout(initScratchpad, 100);
+            } else {
+                modal.classList.add('hidden');
+            }
+        }
+
+        window.addEventListener('keydown', (e) => {
+            if (document.getElementById('gameplayScreen').classList.contains('hidden')) return;
+            if (e.key === 'Enter') submitAnswer();
+        });
+
+        window.onload = function() {
+            loadUserData();
+            renderSectorCards();
+        };
+    </script>
+</body>
+</html>
