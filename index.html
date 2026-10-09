@@ -4,9 +4,12 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>The Fraction Reactor Core</title>
+    <!-- Tailwind CSS -->
     <script src="https://cdn.tailwindcss.com"></script>
+    <!-- FontAwesome & Google Fonts -->
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;600;800;900&family=Rajdhani:wght@500;600;700&family=Fira+Code:wght@400;600&display=swap" rel="stylesheet">
+    
     <script>
         tailwind.config = {
             darkMode: 'class',
@@ -90,7 +93,7 @@
                     <h1 class="font-orbitron font-extrabold text-lg md:text-xl text-white tracking-wider flex items-center gap-2">
                         FRACTION <span class="text-reactor-cyan">REACTOR CORE</span>
                     </h1>
-                    <p class="text-xs text-gray-400 font-code">QUANTUM MATHEMATICS FACILITY v5.0</p>
+                    <p class="text-xs text-gray-400 font-code">QUANTUM MATHEMATICS FACILITY</p>
                 </div>
             </div>
 
@@ -116,7 +119,7 @@
         </div>
     </header>
 
-    <main class="max-w-6xl mx-auto w-full p-4 flex-grow flex flex-col justify-center my-2">
+    <main class="max-w-5xl mx-auto w-full p-4 flex-grow flex flex-col justify-center my-2">
         
         <!-- SECTOR SELECT SCREEN -->
         <section id="sectorSelectScreen" class="space-y-6">
@@ -147,7 +150,6 @@
             </div>
         </section>
 
-        <!-- GAMEPLAY SCREEN (STREAMLINED - NO SIDEBAR / NO STEPS) -->
         <section id="gameplayScreen" class="hidden space-y-6">
             <div class="flex flex-wrap justify-between items-center gap-4 bg-reactor-card p-4 rounded-xl border border-reactor-border">
                 <button onclick="showSectorSelect()" class="reactor-btn bg-reactor-accent text-white px-4 py-2 font-orbitron text-sm flex items-center gap-2 hover:bg-gray-800">
@@ -164,7 +166,7 @@
                 </button>
             </div>
 
-            <!-- Single Main Board -->
+            <!-- Single Main Centered Workspace Panel -->
             <div class="bg-reactor-card border-2 border-reactor-border rounded-2xl p-6 sm:p-10 text-center relative overflow-hidden box-glow-cyan flex flex-col justify-center min-h-[420px] space-y-6">
                 <div class="absolute top-3 left-4 text-xs font-code text-gray-500 tracking-widest">CORE_LOCK_INPUT</div>
                 <div class="absolute top-3 right-4 flex items-center space-x-2">
@@ -172,7 +174,7 @@
                     <span class="text-xs font-code text-reactor-cyan">ACTIVE LOCK</span>
                 </div>
 
-                <!-- Equation Box -->
+                <!-- Equation Display -->
                 <div>
                     <div class="text-xs font-orbitron text-reactor-purple mb-3 tracking-widest">EVALUATE AND REDUCE TO LOWEST TERMS:</div>
                     <div id="equationDisplay" class="text-3xl sm:text-5xl font-code font-bold text-white py-6 px-6 rounded-xl bg-reactor-bg/80 border border-reactor-border inline-flex items-center justify-center gap-3 sm:gap-6 flex-wrap">
@@ -180,7 +182,7 @@
                     </div>
                 </div>
 
-                <!-- Visualizer Representation -->
+                <!-- Visualizer Model -->
                 <div class="bg-reactor-bg/60 p-4 rounded-xl border border-reactor-border max-w-lg mx-auto w-full">
                     <div class="text-[10px] font-orbitron text-gray-400 mb-2">FRACTION MODEL VISUALIZER</div>
                     <div id="visualizerContainer" class="flex justify-center items-center gap-4 min-h-[90px]"></div>
@@ -211,12 +213,11 @@
                     </div>
                 </div>
 
-                <!-- Minimal Feedback Message Area -->
+                <!-- Quiz Feedback Message Area -->
                 <div id="feedbackBox" class="h-8 font-orbitron text-sm font-semibold flex items-center justify-center transition-all"></div>
             </div>
         </section>
 
-        <!-- LEVEL COMPLETE MODAL -->
         <div id="levelCompleteModal" class="fixed inset-0 bg-black/85 backdrop-blur-md z-50 hidden flex items-center justify-center p-4">
             <div class="bg-reactor-card border-2 border-reactor-cyan rounded-2xl p-6 sm:p-8 max-w-lg w-full text-center space-y-6 box-glow-cyan relative">
                 <div class="w-16 h-16 bg-reactor-cyan/20 border-2 border-reactor-cyan rounded-full flex items-center justify-center mx-auto text-reactor-cyan text-3xl">
@@ -253,7 +254,6 @@
             </div>
         </div>
 
-        <!-- CERTIFICATE OF COMPLETION MODAL -->
         <div id="certificateModal" class="fixed inset-0 bg-black/90 backdrop-blur-md z-50 hidden flex items-center justify-center p-4 overflow-y-auto">
             <div class="bg-reactor-card border-2 border-reactor-purple rounded-2xl p-6 sm:p-10 max-w-3xl w-full text-center space-y-6 box-glow-purple relative">
                 <div id="printableCertificate" class="border-4 border-double border-reactor-purple p-8 rounded-xl bg-reactor-bg text-white relative overflow-hidden">
@@ -301,7 +301,6 @@
             </div>
         </div>
 
-        <!-- SCRATCHPAD CANVAS MODAL -->
         <div id="scratchpadModal" class="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 hidden flex flex-col items-center justify-center p-4">
             <div class="bg-reactor-card border border-reactor-cyan rounded-xl p-4 max-w-2xl w-full flex flex-col space-y-3">
                 <div class="flex justify-between items-center font-orbitron text-sm text-reactor-cyan">
@@ -323,7 +322,7 @@
     </footer>
 
     <script>
-      // Game State
+      // State Variables
       let currentSector = 1;
       let currentQuestionIndex = 0;
       const totalQuestionsPerSector = 5;
@@ -345,7 +344,7 @@
 
       let currentProblem = null;
 
-      // Web Audio API Sound Synth
+      // Web Audio API Synthesizer
       const AudioContext = window.AudioContext || window.webkitAudioContext;
       let audioCtx = null;
 
@@ -403,7 +402,6 @@
         } catch(e) {}
       }
 
-      // Math Helpers
       function gcd(a, b) {
         a = Math.abs(a);
         b = Math.abs(b);
@@ -679,7 +677,7 @@
           return;
         }
 
-        // Reduced Target Form
+        // Reduced Target Validation
         const commonDivisor = gcd(currentProblem.ansNum, currentProblem.ansDen);
         const targetNum = currentProblem.ansNum / commonDivisor;
         const targetDen = currentProblem.ansDen / commonDivisor;
@@ -698,7 +696,7 @@
           let acc = Math.round((correctAttempts / totalAttempts) * 100);
           document.getElementById('summaryAccuracy').innerText = `${acc}%`;
 
-          feedback.innerHTML = `<span class="text-reactor-emerald"><i class="fa-solid fa-circle-check mr-1"></i> LOCK STABILIZED!</span>`;
+          feedback.innerHTML = `<span class="text-reactor-emerald"><i class="fa-solid fa-circle-check mr-1"></i> ACCESS GRANTED!</span>`;
 
           currentQuestionIndex++;
 
@@ -711,18 +709,18 @@
           }, 800);
 
         } else {
-          // Incorrect Answer - ABSOLUTELY NO STEPS OR ANSWERS REVEALED
+          // Incorrect Answer - ZERO BREAKDOWNS, REVEALS, OR STEPS
           playSound('wrong');
           streak = 0;
           document.getElementById('statStreak').innerText = '0x';
 
-          feedback.innerHTML = `<span class="text-red-400 font-bold"><i class="fa-solid fa-circle-xmark mr-1"></i> ACCESS DENIED — INCORRECT. TRY AGAIN!</span>`;
+          feedback.innerHTML = `<span class="text-red-400 font-bold"><i class="fa-solid fa-circle-xmark mr-1"></i> INCORRECT ANSWER, TRY AGAIN!</span>`;
         }
       }
 
       function completeSector() {
         if (currentSector < 5) {
-          sectorsData[currentSector].unlocked = true; // unlock next sector
+          sectorsData[currentSector].unlocked = true;
         }
 
         document.getElementById('modalLevelTitle').innerText = `CHAMBER ${currentSector} STABILIZED`;
