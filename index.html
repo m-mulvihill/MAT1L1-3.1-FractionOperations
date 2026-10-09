@@ -389,669 +389,460 @@
     </footer>
 
     <script>
-        let audioCtx = null;
-        let soundEnabled = true;
+      // Global state
+      let currentLevel = 1;
+      let score = 0;
+      let streak = 0;
+      let maxStreak = 0;
+      let currentProblem = null;
+      let userNumerator = '';
+      let userDenominator = '';
+      let timer = null;
+      let timeRemaining = 60;
+      let isTimerRunning = false;
+      let soundEnabled = true;
 
-        function initAudio() {
-            if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+      // Audio Synthesis setup using Web Audio API
+      const AudioContext = window.AudioContext || window.webkitAudioContext;
+      let audioCtx = null;
+
+      function initAudio() {
+        if (!audioCtx) {
+          audioCtx = new AudioContext();
+        }
+      }
+
+      function playSound(type) {
+        if (!soundEnabled) return;
+        initAudio();
+        
+        try {
+          const osc = audioCtx.createOscillator();
+          const gain = audioCtx.createGain();
+          osc.connect(gain);
+          gain.connect(audioCtx.destination);
+
+          const now = audioCtx.currentTime;
+
+          if (type === 'click') {
+            osc.type = 'sine';
+            osc.frequency.setValueAtTime(400, now);
+            osc.frequency.exponentialRampToValueAtTime(800, now + 0.05);
+            gain.gain.setValueAtTime(0.1, now);
+            gain.gain.exponentialRampToValueAtTime(0.01, now + 0.05);
+            osc.start(now);
+            osc.stop(now + 0.05);
+          } else if (type === 'correct') {
+            osc.type = 'triangle';
+            osc.frequency.setValueAtTime(523.25, now); // C5
+            osc.frequency.setValueAtTime(659.25, now + 0.1); // E5
+            osc.frequency.setValueAtTime(783.99, now + 0.2); // G5
+            gain.gain.setValueAtTime(0.15, now);
+            gain.gain.exponentialRampToValueAtTime(0.01, now + 0.35);
+            osc.start(now);
+            osc.stop(now + 0.35);
+          } else if (type === 'wrong') {
+            osc.type = 'sawtooth';
+            osc.frequency.setValueAtTime(200, now);
+            osc.frequency.exponentialRampToValueAtTime(100, now + 0.25);
+            gain.gain.setValueAtTime(0.15, now);
+            gain.gain.exponentialRampToValueAtTime(0.01, now + 0.25);
+            osc.start(now);
+            osc.stop(now + 0.25);
+          }
+        } catch(e) {
+          console.log("Audio not supported or blocked", e);
+        }
+      }
+
+      // GCD helper for simplification check
+      function gcd(a, b) {
+        a = Math.abs(a);
+        b = Math.abs(b);
+        while (b) {
+          let t = b;
+          b = a % b;
+          a = t;
+        }
+        return a;
+      }
+
+      // Generator for 5 progressive difficulty levels
+      function generateProblem(level) {
+        let n1, d1, n2, d2, op, ansNum, ansDen;
+        
+        if (level === 1) {
+          // Level 1: Like denominators (+/-)
+          d1 = Math.floor(Math.random() * 8) + 2;
+          d2 = d1;
+          n1 = Math.floor(Math.random() * 8) + 1;
+          n2 = Math.floor(Math.random() * 8) + 1;
+          op = Math.random() > 0.5 ? '+' : '-';
+          if (op === '-' && n1 < n2) {
+            let temp = n1; n1 = n2; n2 = temp;
+          }
+          if (op === '+') ansNum = n1 + n2;
+          else ansNum = n1 - n2;
+          ansDen = d1;
+        } else if (level === 2) {
+          // Level 2: Unlike denominators (+/-)
+          d1 = Math.floor(Math.random() * 6) + 2;
+          d2 = Math.floor(Math.random() * 6) + 2;
+          while (d1 === d2) d2 = Math.floor(Math.random() * 6) + 2;
+          n1 = Math.floor(Math.random() * 5) + 1;
+          n2 = Math.floor(Math.random() * 5) + 1;
+          op = Math.random() > 0.5 ? '+' : '-';
+          let cross1 = n1 * d2;
+          let cross2 = n2 * d1;
+          if (op === '-' && cross1 < cross2) {
+            let tN = n1; n1 = n2; n2 = tN;
+            let tD = d1; d1 = d2; d2 = tD;
+            cross1 = n1 * d2;
+            cross2 = n2 * d1;
+          }
+          if (op === '+') ansNum = cross1 + cross2;
+          else ansNum = cross1 - cross2;
+          ansDen = d1 * d2;
+        } else if (level === 3) {
+          // Level 3: Fraction Multiplication
+          n1 = Math.floor(Math.random() * 6) + 1;
+          d1 = Math.floor(Math.random() * 6) + 2;
+          n2 = Math.floor(Math.random() * 6) + 1;
+          d2 = Math.floor(Math.random() * 6) + 2;
+          op = '×';
+          ansNum = n1 * n2;
+          ansDen = d1 * d2;
+        } else if (level === 4) {
+          // Level 4: Fraction Division
+          n1 = Math.floor(Math.random() * 6) + 1;
+          d1 = Math.floor(Math.random() * 6) + 2;
+          n2 = Math.floor(Math.random() * 6) + 1;
+          d2 = Math.floor(Math.random() * 6) + 2;
+          op = '÷';
+          ansNum = n1 * d2;
+          ansDen = d1 * n2;
+        } else {
+          // Level 5: Mixed Numbers to improper fraction evaluation (+/-)
+          let w1 = Math.floor(Math.random() * 3) + 1;
+          let w2 = Math.floor(Math.random() * 3) + 1;
+          d1 = Math.floor(Math.random() * 5) + 2;
+          d2 = Math.floor(Math.random() * 5) + 2;
+          let r1 = Math.floor(Math.random() * (d1 - 1)) + 1;
+          let r2 = Math.floor(Math.random() * (d2 - 1)) + 1;
+          
+          n1 = w1 * d1 + r1;
+          n2 = w2 * d2 + r2;
+          op = Math.random() > 0.5 ? '+' : '-';
+
+          let cross1 = n1 * d2;
+          let cross2 = n2 * d1;
+          if (op === '-' && cross1 < cross2) {
+            let tN = n1; n1 = n2; n2 = tN;
+            let tD = d1; d1 = d2; d2 = tD;
+            let tW = w1; w1 = w2; w2 = tW;
+            let tR = r1; r1 = r2; r2 = tR;
+            cross1 = n1 * d2;
+            cross2 = n2 * d1;
+          }
+
+          if (op === '+') ansNum = cross1 + cross2;
+          else ansNum = cross1 - cross2;
+          ansDen = d1 * d2;
+
+          // Attach mixed number display properties
+          return {
+            n1, d1, n2, d2, op, ansNum, ansDen,
+            isMixed: true,
+            w1, r1, w2, r2
+          };
         }
 
-        function playTone(freq, type, duration, vol = 0.08) {
-            if (!soundEnabled) return;
-            try {
-                initAudio();
-                const osc = audioCtx.createOscillator();
-                const gain = audioCtx.createGain();
-                osc.type = type;
-                osc.frequency.setValueAtTime(freq, audioCtx.currentTime);
-                gain.gain.setValueAtTime(vol, audioCtx.currentTime);
-                gain.gain.exponentialRampToValueAtTime(0.0001, audioCtx.currentTime + duration);
-                osc.connect(gain);
-                gain.connect(audioCtx.destination);
-                osc.start();
-                osc.stop(audioCtx.currentTime + duration);
-            } catch (e) {}
-        }
+        return { n1, d1, n2, d2, op, ansNum, ansDen, isMixed: false };
+      }
 
-        function playSound(type) {
-            if (!soundEnabled) return;
-            if (type === 'click') playTone(750, 'sine', 0.04, 0.05);
-            else if (type === 'correct') {
-                playTone(523.25, 'triangle', 0.1, 0.08);
-                setTimeout(() => playTone(659.25, 'triangle', 0.1, 0.08), 70);
-                setTimeout(() => playTone(783.99, 'triangle', 0.18, 0.08), 140);
-            } else if (type === 'wrong') {
-                playTone(220, 'sawtooth', 0.15, 0.12);
-                setTimeout(() => playTone(165, 'sawtooth', 0.25, 0.12), 90);
-            } else if (type === 'unlock') {
-                playTone(440, 'sine', 0.08, 0.08);
-                setTimeout(() => playTone(554.37, 'sine', 0.08, 0.08), 90);
-                setTimeout(() => playTone(659.25, 'sine', 0.08, 0.08), 180);
-                setTimeout(() => playTone(880, 'sine', 0.25, 0.12), 270);
-            }
-        }
+      function renderVisualizer(problem) {
+        const visualizer = document.getElementById('visualizer');
+        visualizer.innerHTML = '';
 
-        function toggleSound() {
-            soundEnabled = !soundEnabled;
-            document.getElementById('soundIcon').className = soundEnabled ? 'fa-solid fa-volume-high' : 'fa-solid fa-volume-xmark text-red-400';
-        }
+        // Generate pie visualizer representation
+        const createPieSVG = (num, den, label) => {
+          const container = document.createElement('div');
+          container.className = 'flex flex-col items-center gap-1';
+          
+          const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+          svg.setAttribute('viewBox', '0 0 100 100');
+          svg.setAttribute('class', 'w-16 h-16 transform -rotate-90 filter drop-shadow');
 
-        const CHAMBERS = [
-            {
-                id: 1,
-                title: "Like Denominators",
-                subtitle: "Basic Fraction Addition & Subtraction",
-                description: "Add and subtract simple fractions sharing identical denominators.",
-                icon: "fa-layer-group",
-                color: "reactor-cyan"
-            },
-            {
-                id: 2,
-                title: "Unlike Denominators",
-                subtitle: "Common Denominators & Equivalent Fractions",
-                description: "Find LCD/LCM to combine fractions with different denominators.",
-                icon: "fa-scale-balanced",
-                color: "reactor-purple"
-            },
-            {
-                id: 3,
-                title: "Multiply & Divide",
-                subtitle: "Numerators, Denominators & Reciprocals",
-                description: "Multiply directly or multiply by the reciprocal (Keep-Change-Flip).",
-                icon: "fa-xmark",
-                color: "reactor-amber"
-            },
-            {
-                id: 4,
-                title: "Mixed Numbers (+/-)",
-                subtitle: "Convert Mixed to Improper Fractions First!",
-                description: "Convert mixed numbers into improper fractions before combining.",
-                icon: "fa-cubes",
-                color: "reactor-pink"
-            },
-            {
-                id: 5,
-                title: "Mixed Numbers (×/÷)",
-                subtitle: "Master Reactor Core Operations",
-                description: "Complex mixed number multiplication and division challenges.",
-                icon: "fa-atom",
-                color: "reactor-emerald"
-            }
-        ];
+          const cx = 50, cy = 50, r = 40;
 
-        let state = {
-            xp: 0,
-            streak: 0,
-            currentLevel: 1,
-            currentNode: 1,
-            totalNodes: 5,
-            unlockedLevel: 1,
-            totalSolved: 0,
-            totalAttempts: 0,
-            timerSeconds: 0,
-            timerInterval: null,
-            currentProblem: null
+          // Draw slice backgrounds
+          for (let i = 0; i < den; i++) {
+            const startAngle = (i * 360) / den;
+            const endAngle = ((i + 1) * 360) / den;
+            
+            const x1 = cx + r * Math.cos((Math.PI * startAngle) / 180);
+            const y1 = cy + r * Math.sin((Math.PI * startAngle) / 180);
+            const x2 = cx + r * Math.cos((Math.PI * endAngle) / 180);
+            const y2 = cy + r * Math.sin((Math.PI * endAngle) / 180);
+
+            const largeArc = endAngle - startAngle > 180 ? 1 : 0;
+            const pathData = `M ${cx} ${cy} L ${x1} ${y1} A ${r} ${r} 0 ${largeArc} 1 ${x2} ${y2} Z`;
+
+            const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+            path.setAttribute('d', pathData);
+            path.setAttribute('stroke', '#0284c7');
+            path.setAttribute('stroke-width', '1.5');
+            path.setAttribute('fill', i < num ? '#38bdf8' : '#0f172a');
+            path.setAttribute('opacity', i < num ? '0.85' : '0.4');
+            svg.appendChild(path);
+          }
+
+          const caption = document.createElement('span');
+          caption.className = 'text-xs text-cyan-400 font-mono';
+          caption.innerText = label;
+
+          container.appendChild(svg);
+          container.appendChild(caption);
+          return container;
         };
 
-        // Greatest Common Divisor
-        function gcd(a, b) {
-            a = Math.abs(a);
-            b = Math.abs(b);
-            while (b) {
-                let t = b;
-                b = a % b;
-                a = t;
-            }
-            return a;
+        if (!problem.isMixed) {
+          visualizer.appendChild(createPieSVG(problem.n1, problem.d1, `${problem.n1}/${problem.d1}`));
+          const opSymbol = document.createElement('div');
+          opSymbol.className = 'text-2xl font-bold text-cyan-400 self-center mx-2';
+          opSymbol.innerText = problem.op;
+          visualizer.appendChild(opSymbol);
+          visualizer.appendChild(createPieSVG(problem.n2, problem.d2, `${problem.n2}/${problem.d2}`));
+        } else {
+          const lbl1 = `${problem.w1} (${problem.r1}/${problem.d1})`;
+          const lbl2 = `${problem.w2} (${problem.r2}/${problem.d2})`;
+          visualizer.appendChild(createPieSVG(problem.r1, problem.d1, lbl1));
+          const opSymbol = document.createElement('div');
+          opSymbol.className = 'text-2xl font-bold text-cyan-400 self-center mx-2';
+          opSymbol.innerText = problem.op;
+          visualizer.appendChild(opSymbol);
+          visualizer.appendChild(createPieSVG(problem.r2, problem.d2, lbl2));
+        }
+      }
+
+      function displayProblem() {
+        currentProblem = generateProblem(currentLevel);
+        userNumerator = '';
+        userDenominator = '';
+        document.getElementById('user-num').value = '';
+        document.getElementById('user-den').value = '';
+        
+        // Hide feedback text on new problem
+        const feedback = document.getElementById('feedback-message');
+        feedback.classList.add('hidden');
+
+        // Render mathematical equation string
+        const displayDiv = document.getElementById('problem-display');
+        
+        let term1HTML = '';
+        let term2HTML = '';
+
+        if (currentProblem.isMixed) {
+          term1HTML = `
+            <div class="flex items-center gap-1">
+              <span class="text-3xl font-bold text-cyan-200">${currentProblem.w1}</span>
+              <div class="inline-flex flex-col items-center">
+                <span class="border-b-2 border-cyan-400 px-2 text-xl font-bold text-cyan-300">${currentProblem.r1}</span>
+                <span class="px-2 text-xl font-bold text-cyan-300">${currentProblem.d1}</span>
+              </div>
+            </div>`;
+          term2HTML = `
+            <div class="flex items-center gap-1">
+              <span class="text-3xl font-bold text-cyan-200">${currentProblem.w2}</span>
+              <div class="inline-flex flex-col items-center">
+                <span class="border-b-2 border-cyan-400 px-2 text-xl font-bold text-cyan-300">${currentProblem.r2}</span>
+                <span class="px-2 text-xl font-bold text-cyan-300">${currentProblem.d2}</span>
+              </div>
+            </div>`;
+        } else {
+          term1HTML = `
+            <div class="inline-flex flex-col items-center">
+              <span class="border-b-2 border-cyan-400 px-2 text-2xl font-bold text-cyan-300">${currentProblem.n1}</span>
+              <span class="px-2 text-2xl font-bold text-cyan-300">${currentProblem.d1}</span>
+            </div>`;
+          term2HTML = `
+            <div class="inline-flex flex-col items-center">
+              <span class="border-b-2 border-cyan-400 px-2 text-2xl font-bold text-cyan-300">${currentProblem.n2}</span>
+              <span class="px-2 text-2xl font-bold text-cyan-300">${currentProblem.d2}</span>
+            </div>`;
         }
 
-        // Least Common Multiple
-        function lcm(a, b) {
-            return (a * b) / gcd(a, b);
+        displayDiv.innerHTML = `
+          ${term1HTML}
+          <span class="text-3xl font-bold text-cyan-400 mx-3">${currentProblem.op}</span>
+          ${term2HTML}
+        `;
+
+        renderVisualizer(currentProblem);
+      }
+
+      function checkAnswer() {
+        playSound('click');
+        const inputNum = parseInt(document.getElementById('user-num').value);
+        const inputDen = parseInt(document.getElementById('user-den').value);
+
+        const feedback = document.getElementById('feedback-message');
+        feedback.classList.remove('hidden', 'bg-emerald-950/80', 'border-emerald-500', 'text-emerald-300', 'bg-rose-950/80', 'border-rose-500', 'text-rose-300');
+
+        if (isNaN(inputNum) || isNaN(inputDen) || inputDen === 0) {
+          feedback.classList.add('bg-rose-950/80', 'border-rose-500', 'text-rose-300');
+          feedback.innerHTML = '<i class="fas font-mono fa-exclamation-triangle mr-2"></i>Please enter valid numbers for both numerator and denominator!';
+          return;
         }
 
-        function randInt(min, max) {
-            return Math.floor(Math.random() * (max - min + 1)) + min;
+        // Simplify correct target answer
+        const commonDivisor = gcd(currentProblem.ansNum, currentProblem.ansDen);
+        const targetNum = currentProblem.ansNum / commonDivisor;
+        const targetDen = currentProblem.ansDen / commonDivisor;
+
+        // Check if student's answer is mathematically equivalent and fully reduced
+        if (inputNum === targetNum && inputDen === targetDen) {
+          // Correct answer!
+          playSound('correct');
+          score += 100 * currentLevel;
+          streak += 1;
+          if (streak > maxStreak) maxStreak = streak;
+
+          document.getElementById('score-display').innerText = score;
+          document.getElementById('streak-display').innerText = streak;
+
+          feedback.classList.add('bg-emerald-950/80', 'border-emerald-500', 'text-emerald-300');
+          feedback.innerHTML = '<i class="fas fa-check-circle mr-2"></i>CORE STABILIZED! Outstanding calculations!';
+
+          setTimeout(() => {
+            displayProblem();
+          }, 1200);
+        } else {
+          // Incorrect answer check
+          playSound('wrong');
+          streak = 0;
+          document.getElementById('streak-display').innerText = streak;
+
+          // Check if answer is equivalent but unreduced
+          const inputGcd = gcd(inputNum, inputDen);
+          const isEquivalent = (inputNum / inputGcd === targetNum) && (inputDen / inputGcd === targetDen);
+
+          feedback.classList.add('bg-rose-950/80', 'border-rose-500', 'text-rose-300');
+          
+          if (isEquivalent) {
+            feedback.innerHTML = '<i class="fas fa-exclamation-circle mr-2"></i>Incorrect! Your fraction is not fully reduced to its simplest form. Try reducing!';
+          } else {
+            feedback.innerHTML = '<i class="fas fa-times-circle mr-2"></i>Incorrect. Check your common denominators and operations, then try again!';
+          }
+        }
+      }
+
+      function selectLevel(lvl) {
+        playSound('click');
+        currentLevel = lvl;
+        for (let i = 1; i <= 5; i++) {
+          const btn = document.getElementById(`lvl-btn-${i}`);
+          if (i === lvl) {
+            btn.className = 'px-3 py-1.5 rounded-lg font-bold text-xs bg-cyan-500 text-slate-950 border border-cyan-400 shadow-lg shadow-cyan-500/30';
+          } else {
+            btn.className = 'px-3 py-1.5 rounded-lg font-bold text-xs bg-slate-800 hover:bg-slate-700 text-cyan-400 border border-slate-700';
+          }
+        }
+        displayProblem();
+      }
+
+      let canvas, ctx, isDrawing = false;
+
+      function initScratchpad() {
+        canvas = document.getElementById('scratchpad-canvas');
+        ctx = canvas.getContext('2d');
+
+        function resizeCanvas() {
+          const rect = canvas.getBoundingClientRect();
+          canvas.width = rect.width;
+          canvas.height = rect.height;
+          ctx.strokeStyle = '#38bdf8';
+          ctx.lineWidth = 3;
+          ctx.lineCap = 'round';
         }
 
-        function generateProblem(level) {
-            let p = {
-                level: level,
-                op: '',
-                f1: { w: 0, n: 1, d: 2 },
-                f2: { w: 0, n: 1, d: 2 },
-                ansN: 1,
-                ansD: 1,
-                steps: []
-            };
+        window.addEventListener('resize', resizeCanvas);
+        resizeCanvas();
 
-            if (level === 1) {
-                // Like Denominators (+ / -)
-                p.op = Math.random() > 0.5 ? '+' : '-';
-                const den = randInt(3, 10);
-                let n1 = randInt(1, den - 1);
-                let n2 = randInt(1, den - 1);
+        const getPos = (e) => {
+          const rect = canvas.getBoundingClientRect();
+          const clientX = e.touches ? e.touches[0].clientX : e.clientX;
+          const clientY = e.touches ? e.touches[0].clientY : e.clientY;
+          return {
+            x: clientX - rect.left,
+            y: clientY - rect.top
+          };
+        };
 
-                if (p.op === '-' && n1 < n2) {
-                    let temp = n1; n1 = n2; n2 = temp;
-                }
+        const startDraw = (e) => {
+          isDrawing = true;
+          const pos = getPos(e);
+          ctx.beginPath();
+          ctx.moveTo(pos.x, pos.y);
+        };
 
-                p.f1 = { w: 0, n: n1, d: den };
-                p.f2 = { w: 0, n: n2, d: den };
+        const draw = (e) => {
+          if (!isDrawing) return;
+          const pos = getPos(e);
+          ctx.lineTo(pos.x, pos.y);
+          ctx.stroke();
+        };
 
-                let rawN = p.op === '+' ? n1 + n2 : n1 - n2;
-                let rawD = den;
-                let g = gcd(rawN, rawD);
+        const stopDraw = () => { isDrawing = false; };
 
-                p.ansN = rawN / g;
-                p.ansD = rawD / g;
+        canvas.addEventListener('mousedown', startDraw);
+        canvas.addEventListener('mousemove', draw);
+        canvas.addEventListener('mouseup', stopDraw);
+        canvas.addEventListener('mouseleave', stopDraw);
 
-                p.steps.push(`1. Denominators are identical (${den}). Combine numerators: ${n1} ${p.op} ${n2} = ${rawN}`);
-                p.steps.push(`2. Raw result: ${rawN}/${rawD}`);
-                if (g > 1) {
-                    p.steps.push(`3. Simplify by dividing numerator and denominator by GCD (${g}): ${p.ansN}/${p.ansD}`);
-                } else {
-                    p.steps.push(`3. Fraction is already in lowest terms: ${p.ansN}/${p.ansD}`);
-                }
-            }
-            else if (level === 2) {
-                // Unlike Denominators (+ / -)
-                p.op = Math.random() > 0.5 ? '+' : '-';
-                let d1 = randInt(2, 8);
-                let d2 = randInt(2, 8);
-                while (d1 === d2) d2 = randInt(2, 8);
+        canvas.addEventListener('touchstart', (e) => { e.preventDefault(); startDraw(e); });
+        canvas.addEventListener('touchmove', (e) => { e.preventDefault(); draw(e); });
+        canvas.addEventListener('touchend', stopDraw);
+      }
 
-                let n1 = randInt(1, d1 * 2);
-                let n2 = randInt(1, d2 * 2);
-
-                let commonD = lcm(d1, d2);
-                let scaledN1 = n1 * (commonD / d1);
-                let scaledN2 = n2 * (commonD / d2);
-
-                if (p.op === '-' && scaledN1 < scaledN2) {
-                    let tempN = n1; n1 = n2; n2 = tempN;
-                    let tempD = d1; d1 = d2; d2 = tempD;
-                    scaledN1 = n1 * (commonD / d1);
-                    scaledN2 = n2 * (commonD / d2);
-                }
-
-                p.f1 = { w: 0, n: n1, d: d1 };
-                p.f2 = { w: 0, n: n2, d: d2 };
-
-                let rawN = p.op === '+' ? scaledN1 + scaledN2 : scaledN1 - scaledN2;
-                let rawD = commonD;
-                let g = gcd(rawN, rawD);
-
-                p.ansN = rawN / g;
-                p.ansD = rawD / g;
-
-                p.steps.push(`1. Find Least Common Denominator (LCD) of ${d1} and ${d2}: LCD = ${commonD}`);
-                p.steps.push(`2. Convert to equivalent fractions: (${n1}×${commonD/d1})/(${d1}×${commonD/d1}) = ${scaledN1}/${commonD} and (${n2}×${commonD/d2})/(${d2}×${commonD/d2}) = ${scaledN2}/${commonD}`);
-                p.steps.push(`3. Combine numerators: ${scaledN1} ${p.op} ${scaledN2} = ${rawN}/${rawD}`);
-                if (g > 1) p.steps.push(`4. Reduce using GCD (${g}): ${p.ansN}/${p.ansD}`);
-            }
-            else if (level === 3) {
-                // Multiply & Divide
-                p.op = Math.random() > 0.5 ? '×' : '÷';
-                let n1 = randInt(1, 6);
-                let d1 = randInt(2, 7);
-                let n2 = randInt(1, 6);
-                let d2 = randInt(2, 7);
-
-                p.f1 = { w: 0, n: n1, d: d1 };
-                p.f2 = { w: 0, n: n2, d: d2 };
-
-                let rawN, rawD;
-                if (p.op === '×') {
-                    rawN = n1 * n2;
-                    rawD = d1 * d2;
-                    p.steps.push(`1. Multiply numerators: ${n1} × ${n2} = ${rawN}`);
-                    p.steps.push(`2. Multiply denominators: ${d1} × ${d2} = ${rawD}`);
-                } else {
-                    rawN = n1 * d2;
-                    rawD = d1 * n2;
-                    p.steps.push(`1. Apply Keep-Change-Flip (multiply by reciprocal): ${n1}/${d1} × ${d2}/${n2}`);
-                    p.steps.push(`2. Multiply across: (${n1}×${d2})/(${d1}×${n2}) = ${rawN}/${rawD}`);
-                }
-
-                let g = gcd(rawN, rawD);
-                p.ansN = rawN / g;
-                p.ansD = rawD / g;
-
-                if (g > 1) p.steps.push(`3. Reduce fraction by GCD (${g}): ${p.ansN}/${p.ansD}`);
-                else p.steps.push(`3. Fraction is in reduced form: ${p.ansN}/${p.ansD}`);
-            }
-            else if (level === 4) {
-                // Mixed Numbers (+ / -)
-                p.op = Math.random() > 0.5 ? '+' : '-';
-                let w1 = randInt(1, 3);
-                let n1 = randInt(1, 4);
-                let d1 = randInt(2, 5);
-                
-                let w2 = randInt(1, 3);
-                let n2 = randInt(1, 4);
-                let d2 = randInt(2, 5);
-
-                let impN1 = w1 * d1 + n1;
-                let impN2 = w2 * d2 + n2;
-
-                let commonD = lcm(d1, d2);
-                let scaledN1 = impN1 * (commonD / d1);
-                let scaledN2 = impN2 * (commonD / d2);
-
-                if (p.op === '-' && scaledN1 < scaledN2) {
-                    let tempW = w1, tempN = n1, tempD = d1;
-                    w1 = w2; n1 = n2; d1 = d2;
-                    w2 = tempW; n2 = tempN; d2 = tempD;
-                    impN1 = w1 * d1 + n1;
-                    impN2 = w2 * d2 + n2;
-                    commonD = lcm(d1, d2);
-                    scaledN1 = impN1 * (commonD / d1);
-                    scaledN2 = impN2 * (commonD / d2);
-                }
-
-                p.f1 = { w: w1, n: n1, d: d1 };
-                p.f2 = { w: w2, n: n2, d: d2 };
-
-                let rawN = p.op === '+' ? scaledN1 + scaledN2 : scaledN1 - scaledN2;
-                let rawD = commonD;
-                let g = gcd(rawN, rawD);
-
-                p.ansN = rawN / g;
-                p.ansD = rawD / g;
-
-                p.steps.push(`1. Convert mixed numbers to improper fractions: ${w1} ${n1}/${d1} = ${impN1}/${d1} AND ${w2} ${n2}/${d2} = ${impN2}/${d2}`);
-                p.steps.push(`2. Find LCD of ${d1} and ${d2}: LCD = ${commonD}`);
-                p.steps.push(`3. Convert & calculate: ${scaledN1}/${commonD} ${p.op} ${scaledN2}/${commonD} = ${rawN}/${commonD}`);
-                if (g > 1) p.steps.push(`4. Reduce improper fraction by GCD (${g}): ${p.ansN}/${p.ansD}`);
-            }
-            else {
-                // Level 5: Mixed Numbers (× / ÷)
-                p.op = Math.random() > 0.5 ? '×' : '÷';
-                let w1 = randInt(1, 3);
-                let n1 = randInt(1, 3);
-                let d1 = randInt(2, 4);
-
-                let w2 = randInt(1, 3);
-                let n2 = randInt(1, 3);
-                let d2 = randInt(2, 4);
-
-                let impN1 = w1 * d1 + n1;
-                let impN2 = w2 * d2 + n2;
-
-                p.f1 = { w: w1, n: n1, d: d1 };
-                p.f2 = { w: w2, n: n2, d: d2 };
-
-                let rawN, rawD;
-                p.steps.push(`1. Convert mixed numbers to improper fractions first: ${w1} ${n1}/${d1} = ${impN1}/${d1} AND ${w2} ${n2}/${d2} = ${impN2}/${d2}`);
-
-                if (p.op === '×') {
-                    rawN = impN1 * impN2;
-                    rawD = d1 * d2;
-                    p.steps.push(`2. Multiply numerators & denominators: (${impN1}×${impN2})/(${d1}×${d2}) = ${rawN}/${rawD}`);
-                } else {
-                    rawN = impN1 * d2;
-                    rawD = d1 * impN2;
-                    p.steps.push(`2. Flip second fraction and multiply: (${impN1}/${d1}) × (${d2}/${impN2}) = ${rawN}/${rawD}`);
-                }
-
-                let g = gcd(rawN, rawD);
-                p.ansN = rawN / g;
-                p.ansD = rawD / g;
-
-                if (g > 1) p.steps.push(`3. Reduce improper fraction using GCD (${g}): ${p.ansN}/${p.ansD}`);
-                else p.steps.push(`3. Result is already reduced improper fraction: ${p.ansN}/${p.ansD}`);
-            }
-
-            return p;
+      function clearScratchpad() {
+        playSound('click');
+        if (ctx && canvas) {
+          ctx.clearRect(0, 0, canvas.width, canvas.height);
         }
+      }
 
-        function loadUserData() {
-            const saved = localStorage.getItem('fraction_reactor_core_save');
-            if (saved) {
-                try {
-                    const parsed = JSON.parse(saved);
-                    state.xp = parsed.xp || 0;
-                    state.unlockedLevel = parsed.unlockedLevel || 1;
-                    state.totalSolved = parsed.totalSolved || 0;
-                    state.totalAttempts = parsed.totalAttempts || 0;
-                } catch(e) {}
-            }
-            updateStatsUI();
+      function openCertificateModal() {
+        playSound('click');
+        document.getElementById('cert-score').innerText = score;
+        document.getElementById('cert-streak').innerText = maxStreak;
+        document.getElementById('cert-date').innerText = new Date().toLocaleDateString();
+        document.getElementById('cert-modal').classList.remove('hidden');
+        
+        // Save best score to local storage
+        const bestScore = localStorage.getItem('fraction_core_best') || 0;
+        if (score > parseInt(bestScore)) {
+          localStorage.setItem('fraction_core_best', score);
         }
+      }
 
-        function saveUserData() {
-            localStorage.setItem('fraction_reactor_core_save', JSON.stringify({
-                xp: state.xp,
-                unlockedLevel: state.unlockedLevel,
-                totalSolved: state.totalSolved,
-                totalAttempts: state.totalAttempts
-            }));
-        }
+      function closeCertificateModal() {
+        playSound('click');
+        document.getElementById('cert-modal').classList.add('hidden');
+      }
 
-        function updateStatsUI() {
-            document.getElementById('statXP').innerText = `${state.xp} XP`;
-            document.getElementById('statStreak').innerText = `${state.streak}x`;
-            document.getElementById('summarySolved').innerText = state.totalSolved;
-            document.getElementById('summaryUnlocked').innerText = `${state.unlockedLevel} / 5`;
-            
-            const acc = state.totalAttempts > 0 ? Math.round((state.totalSolved / state.totalAttempts) * 100) : 100;
-            document.getElementById('summaryAccuracy').innerText = `${acc}%`;
+      window.onload = function() {
+        initScratchpad();
+        selectLevel(1);
 
-            let rank = "CADET";
-            if (state.xp >= 1000) rank = "REACTOR MASTER";
-            else if (state.xp >= 600) rank = "QUANTUM ENGINEER";
-            else if (state.xp >= 300) rank = "CORE TECHNICIAN";
-            else if (state.xp >= 100) rank = "OPERATIVE";
-            document.getElementById('summaryRank').innerText = rank;
-        }
-
-        function renderSectorCards() {
-            const container = document.getElementById('sectorCardsContainer');
-            container.innerHTML = "";
-
-            CHAMBERS.forEach(ch => {
-                const isUnlocked = ch.id <= state.unlockedLevel;
-                const card = document.createElement('div');
-                card.className = `bg-reactor-card border ${isUnlocked ? 'border-reactor-border hover:border-' + ch.color : 'border-gray-800 opacity-60'} p-6 rounded-2xl flex flex-col justify-between transition-all`;
-
-                card.innerHTML = `
-                    <div class="space-y-3">
-                        <div class="flex justify-between items-start">
-                            <span class="w-10 h-10 rounded-xl ${isUnlocked ? 'bg-reactor-bg border border-reactor-border text-reactor-cyan' : 'bg-gray-900 text-gray-600'} flex items-center justify-center text-lg">
-                                <i class="fa-solid ${ch.icon}"></i>
-                            </span>
-                            <span class="font-orbitron text-[10px] font-bold px-2 py-1 rounded ${isUnlocked ? 'bg-reactor-cyan/10 text-reactor-cyan' : 'bg-gray-800 text-gray-500'}">
-                                ${isUnlocked ? 'ONLINE' : 'LOCKED'}
-                            </span>
-                        </div>
-                        <div>
-                            <h3 class="font-orbitron text-lg font-bold text-white">CHAMBER ${ch.id}: ${ch.title}</h3>
-                            <p class="text-xs text-reactor-purple font-code">${ch.subtitle}</p>
-                        </div>
-                        <p class="text-xs text-gray-400 font-rajdhani">${ch.description}</p>
-                    </div>
-                    <button onclick="${isUnlocked ? `startLevel(${ch.id})` : ''}" ${!isUnlocked ? 'disabled' : ''} class="reactor-btn w-full mt-6 ${isUnlocked ? 'bg-reactor-cyan/20 hover:bg-reactor-cyan/40 border border-reactor-cyan text-reactor-cyan' : 'bg-gray-800 text-gray-600 border border-gray-700 cursor-not-allowed'} font-orbitron font-bold text-xs py-3 rounded">
-                        ${isUnlocked ? 'INITIALIZE STABILIZATION' : 'LOCKED - CLEAR PREVIOUS'}
-                    </button>
-                `;
-                container.appendChild(card);
-            });
-        }
-
-        function startTimer() {
-            clearInterval(state.timerInterval);
-            state.timerSeconds = 0;
-            state.timerInterval = setInterval(() => {
-                state.timerSeconds++;
-                const mins = String(Math.floor(state.timerSeconds / 60)).padStart(2, '0');
-                const secs = String(state.timerSeconds % 60).padStart(2, '0');
-                document.getElementById('statTimer').innerText = `${mins}:${secs}`;
-            }, 1000);
-        }
-
-        function showSectorSelect() {
-            clearInterval(state.timerInterval);
-            document.getElementById('sectorSelectScreen').classList.remove('hidden');
-            document.getElementById('gameplayScreen').classList.add('hidden');
-            renderSectorCards();
-            updateStatsUI();
-        }
-
-        function startLevel(lvlId) {
-            playSound('click');
-            state.currentLevel = lvlId;
-            state.currentNode = 1;
-            document.getElementById('sectorSelectScreen').classList.add('hidden');
-            document.getElementById('gameplayScreen').classList.remove('hidden');
-            document.getElementById('gameSectorBadge').innerText = `CHAMBER ${lvlId}`;
-            
-            startTimer();
-            loadNextQuestion();
-        }
-
-        function renderFractionHTML(f) {
-            if (f.w > 0) {
-                return `<span class="mr-1 text-reactor-cyan font-bold">${f.w}</span><div class="fraction-inline"><span class="fraction-numerator">${f.n}</span><span class="fraction-denominator">${f.d}</span></div>`;
-            }
-            return `<div class="fraction-inline"><span class="fraction-numerator">${f.n}</span><span class="fraction-denominator">${f.d}</span></div>`;
-        }
-
-        function renderVisualizer(p) {
-            const container = document.getElementById('visualizerContainer');
-            let den = p.f1.d;
-            let n1 = p.f1.w ? (p.f1.w * p.f1.d + p.f1.n) : p.f1.n;
-            
-            // Build simple SVG Fraction Bar representation
-            let barsHTML = `<div class="w-full flex flex-col gap-2 items-center text-xs font-code">
-                <div class="text-gray-400">AREA MODEL REPRESENTATION</div>
-                <div class="w-full max-w-xs bg-reactor-card border border-reactor-border h-8 rounded flex overflow-hidden p-0.5">`;
-
-            let displayTotal = Math.max(den, n1, p.f2.d);
-            for (let i = 0; i < displayTotal; i++) {
-                let isFilled = i < n1;
-                barsHTML += `<div class="flex-1 h-full mx-0.5 rounded-sm ${isFilled ? 'bg-reactor-cyan border border-reactor-cyan' : 'bg-reactor-bg border border-gray-700'}"></div>`;
-            }
-            barsHTML += `</div><div class="text-reactor-cyan font-bold">${n1} / ${den} visual slices</div></div>`;
-
-            container.innerHTML = barsHTML;
-        }
-
-        function loadNextQuestion() {
-            document.getElementById('inputNum').value = "";
-            document.getElementById('inputDen').value = "";
-            document.getElementById('feedbackBox').innerText = "";
-            document.getElementById('gameProgressText').innerText = `NODE ${state.currentNode} OF ${state.totalNodes}`;
-
-            state.currentProblem = generateProblem(state.currentLevel);
-            const p = state.currentProblem;
-
-            const eqContainer = document.getElementById('equationDisplay');
-            eqContainer.innerHTML = `
-                ${renderFractionHTML(p.f1)}
-                <span class="text-reactor-purple mx-2 font-bold">${p.op}</span>
-                ${renderFractionHTML(p.f2)}
-                <span class="text-gray-400 mx-2">=</span>
-                <span class="text-reactor-cyan font-bold">?</span>
-            `;
-
-            renderVisualizer(p);
-
-            const stepsList = document.getElementById('stepsList');
-            stepsList.innerHTML = p.steps.map(s => `<div class="p-2 bg-reactor-bg rounded border border-reactor-border">${s}</div>`).join('');
-            
-            document.getElementById('inputNum').focus();
-        }
-
-        function quickInput(field) {
-            if (field === 'num') document.getElementById('inputNum').focus();
-            else document.getElementById('inputDen').focus();
-        }
-
-        function clearInputs() {
-            document.getElementById('inputNum').value = "";
-            document.getElementById('inputDen').value = "";
-            document.getElementById('inputNum').focus();
-        }
-
-        function submitAnswer() {
-            let numStr = document.getElementById('inputNum').value.trim();
-            let denStr = document.getElementById('inputDen').value.trim();
-
-            // Allow typing "7/2" directly in the numerator box
-            if (numStr.includes('/')) {
-                const parts = numStr.split('/');
-                numStr = parts[0];
-                denStr = parts[1];
-            }
-
-            if (!numStr) return;
-
-            let userN = parseInt(numStr, 10);
-            let userD = denStr ? parseInt(denStr, 10) : 1;
-
-            if (isNaN(userN) || isNaN(userD) || userD === 0) {
-                const fb = document.getElementById('feedbackBox');
-                fb.className = "h-8 font-orbitron text-xs font-semibold text-red-400";
-                fb.innerText = "INVALID INPUT! Enter valid integer values.";
-                return;
-            }
-
-            state.totalAttempts++;
-            const p = state.currentProblem;
-            const fb = document.getElementById('feedbackBox');
-
-            if (userN === p.ansN && userD === p.ansD) {
-                // Correct Answer
-                playSound('correct');
-                state.streak++;
-                state.totalSolved++;
-                const earnedXP = 25 * state.streak;
-                state.xp += earnedXP;
-                updateStatsUI();
-                saveUserData();
-
-                fb.className = "h-8 font-orbitron text-sm font-semibold text-reactor-emerald glow-cyan";
-                fb.innerText = `REACTION STABILIZED! +${earnedXP} XP`;
-
-                setTimeout(() => {
-                    if (state.currentNode < state.totalNodes) {
-                        state.currentNode++;
-                        loadNextQuestion();
-                    } else {
-                        onLevelComplete();
-                    }
-                }, 1100);
-            } else {
-                // Check if correct value but not reduced
-                let userVal = userN / userD;
-                let correctVal = p.ansN / p.ansD;
-
-                playSound('wrong');
-                state.streak = 0;
-                updateStatsUI();
-
-                if (Math.abs(userVal - correctVal) < 0.0001 && (userN !== p.ansN || userD !== p.ansD)) {
-                    fb.className = "h-8 font-orbitron text-xs font-semibold text-reactor-amber";
-                    fb.innerText = `EQUIVALENT VALUE, BUT NOT FULLY REDUCED! Divide by GCD (${gcd(userN, userD)}).`;
-                } else {
-                    fb.className = "h-8 font-orbitron text-xs font-semibold text-reactor-pink";
-                    fb.innerText = `REACTION UNSTABLE! Correct reduced answer: ${p.ansN}/${p.ansD}`;
-                }
-            }
-        }
-
-        function requestHint() {
-            playSound('click');
-            if (state.xp >= 10) {
-                state.xp -= 10;
-                updateStatsUI();
-                const fb = document.getElementById('feedbackBox');
-                fb.className = "h-8 font-orbitron text-xs font-semibold text-reactor-amber";
-                fb.innerText = `HINT: ${state.currentProblem.steps[0]}`;
-            } else {
-                alert("Insufficient Energy XP for hint protocol!");
-            }
-        }
-
-        function onLevelComplete() {
-            playSound('unlock');
-            clearInterval(state.timerInterval);
-
-            if (state.currentLevel === state.unlockedLevel && state.unlockedLevel < 5) {
-                state.unlockedLevel++;
-                saveUserData();
-            }
-
-            const mins = String(Math.floor(state.timerSeconds / 60)).padStart(2, '0');
-            const secs = String(state.timerSeconds % 60).padStart(2, '0');
-
-            document.getElementById('modalLevelTitle').innerText = `CHAMBER ${state.currentLevel} STABILIZED`;
-            document.getElementById('modalXPGained').innerText = `+${120 * state.currentLevel} XP`;
-            document.getElementById('modalAccuracy').innerText = `100%`;
-            document.getElementById('modalTime').innerText = `${mins}:${secs}`;
-
-            if (state.currentLevel === 5) {
-                showCertificate();
-            } else {
-                document.getElementById('levelCompleteModal').classList.remove('hidden');
-            }
-        }
-
-        function nextLevel() {
-            document.getElementById('levelCompleteModal').classList.add('hidden');
-            if (state.currentLevel < 5) startLevel(state.currentLevel + 1);
-            else showSectorSelect();
-        }
-
-        function showCertificate() {
-            document.getElementById('levelCompleteModal').classList.add('hidden');
-            document.getElementById('certXP').innerText = `${state.xp} XP`;
-            document.getElementById('certDate').innerText = new Date().toISOString().split('T')[0];
-            document.getElementById('certificateModal').classList.remove('hidden');
-        }
-
-        function hideCertificate() {
-            document.getElementById('certificateModal').classList.add('hidden');
-        }
-
-        let canvas, ctx, isDrawing = false;
-
-        function initScratchpad() {
-            canvas = document.getElementById('scratchCanvas');
-            ctx = canvas.getContext('2d');
-            canvas.width = canvas.parentElement.clientWidth;
-            canvas.height = canvas.parentElement.clientHeight;
-
-            ctx.strokeStyle = '#00f0ff';
-            ctx.lineWidth = 2;
-            ctx.lineCap = 'round';
-
-            canvas.addEventListener('mousedown', startDraw);
-            canvas.addEventListener('mousemove', draw);
-            canvas.addEventListener('mouseup', stopDraw);
-            canvas.addEventListener('touchstart', (e) => { startDraw(e.touches[0]); e.preventDefault(); });
-            canvas.addEventListener('touchmove', (e) => { draw(e.touches[0]); e.preventDefault(); });
-            canvas.addEventListener('touchend', stopDraw);
-        }
-
-        function startDraw(e) {
-            isDrawing = true;
-            const rect = canvas.getBoundingClientRect();
-            ctx.beginPath();
-            ctx.moveTo(e.clientX - rect.left, e.clientY - rect.top);
-        }
-
-        function draw(e) {
-            if (!isDrawing) return;
-            const rect = canvas.getBoundingClientRect();
-            ctx.lineTo(e.clientX - rect.left, e.clientY - rect.top);
-            ctx.stroke();
-        }
-
-        function stopDraw() { isDrawing = false; }
-        function clearScratchpad() { ctx.clearRect(0, 0, canvas.width, canvas.height); }
-
-        function toggleScratchpad() {
-            playSound('click');
-            const modal = document.getElementById('scratchpadModal');
-            if (modal.classList.contains('hidden')) {
-                modal.classList.remove('hidden');
-                setTimeout(initScratchpad, 100);
-            } else {
-                modal.classList.add('hidden');
-            }
-        }
-
-        window.addEventListener('keydown', (e) => {
-            if (document.getElementById('gameplayScreen').classList.contains('hidden')) return;
-            if (e.key === 'Enter') submitAnswer();
+        document.getElementById('submit-btn').addEventListener('click', checkAnswer);
+        document.getElementById('user-num').addEventListener('keypress', (e) => {
+          if (e.key === 'Enter') checkAnswer();
         });
-
-        window.onload = function() {
-            loadUserData();
-            renderSectorCards();
-        };
+        document.getElementById('user-den').addEventListener('keypress', (e) => {
+          if (e.key === 'Enter') checkAnswer();
+        });
+      };
     </script>
-</body>
+  </body>
 </html>
